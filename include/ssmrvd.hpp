@@ -1,6 +1,7 @@
 #pragma once
 
 #include <CGAL/Kernel/global_functions_3.h>
+#include <CGAL/Origin.h>
 #include <CGAL/Simple_cartesian.h>
 #include <CGAL/Surface_mesh.h>
 #include <CGAL/Surface_mesh_parameterization/IO/File_off.h>
@@ -12,6 +13,7 @@
 #include <CGAL/AABB_traits.h>
 #include <CGAL/AABB_face_graph_triangle_primitive.h>
 #include <CGAL/boost/graph/graph_traits_Polyhedron_3.h>
+#include <CGAL/boost/graph/graph_traits_Surface_mesh.h>
 #include <CGAL/boost/graph/iterator.h>
 #include <CGAL/boost/graph/properties.h>
 #include <CGAL/config.h>
@@ -19,6 +21,7 @@
 #include <CGAL/kernel_assertions.h>
 #include <CGAL/number_utils.h>
 
+#include <cstddef>
 #include <limits>
 #include <unordered_map>
 #include <vector>
@@ -73,7 +76,7 @@ struct Parametric_line_3 {
 };
 
 template <class K, class T>
-bool isect(const Parametric_line_3<K, T> &l, const typename K::Vector &n, const typename K::FT &D, T &t) {
+bool isect(const Parametric_line_3<K, T> &l, const typename K::Vector_3 &n, const typename K::FT &D, T &t) {
     auto nd = scalar_product(n, l.d), np = scalar_product(n, l.p - ORIGIN) + D;
     if (is_zero(nd)) {
         t = std::numeric_limits<T>::infinity();
@@ -88,6 +91,31 @@ bool isect(const Parametric_line_3<K, T> &l, const typename K::Plane_3 &p, T &t)
     return isect(l, p.orthogonal_vector(), p.d(), t);
 }
 
+template <class K, class T>
+bool isect(const Parametric_line_3<K, T> &l0, const Parametric_line_3<K, T> &l1, T &t0, T &t1, bool coplanar = false) {
+    auto d0 = l0.d, d1 = l1.d;
+    auto p0 = l0.p, p1 = l1.p;
+    auto n = cross_product(d0, d1);
+    if (is_zero(n.squared_length())) {
+        // parallel
+        return false;
+    }
+
+    auto tn0 = cross_product((p1 - p0), d1);
+    if (!coplanar && !is_zero(scalar_product(tn0, n))) {
+        // not coplanar
+        return false;
+    }
+    t0 = tn0.x() / n.x();
+    auto tn1 = cross_product((p1 - p0), d0);
+    t1 = tn1.x() / n.x();
+
+    if (t0 < l0.t_min || t0 > l0.t_max || t1 < l1.t_min || t1 > l1.t_max) {
+        return false;
+    }
+    return true;
+}
+
 template <class Kernel, class FaceGraph, class VPMap>
 Kernel::Plane_3 supporting_plane(typename boost::graph_traits<FaceGraph>::halfedge_descriptor hd, const FaceGraph &g,
                                  const VPMap &vpm) {
@@ -95,6 +123,14 @@ Kernel::Plane_3 supporting_plane(typename boost::graph_traits<FaceGraph>::halfed
     auto v0 = vpm[i0], v1 = vpm[i1], v2 = vpm[i2];
     return {v0, v1, v2};
 }
+
+template <class K, class T, class FaceGraph, class VPMap>
+Parametric_line_3<K, T> edge_segment(typename boost::graph_traits<FaceGraph>::halfedge_descriptor hd,
+                                     const FaceGraph &g, const VPMap &vpm) {
+    auto i0 = source(hd, g), i1 = target(hd, g);
+    return Parametric_line_3<K, T>::segment(vpm[i0], vpm[i1]);
+}
+
 namespace SSM_restricted_voronoi_diagram {
 // template <class Kernel, class MetricPolyhedron, class SurfaceMesh,
 //           class VertexPointPMap = typename boost::property_map<SurfaceMesh, vertex_point_t>::const_type,
@@ -106,12 +142,13 @@ class SSM_restricted_voronoi_diagram {
     using FT = Kernel::FT;
     using T = FT;
     using Point_3 = Kernel::Point_3;
+    using Vector_3 = Kernel::Vector_3;
     using Ray_3 = Kernel::Ray_3;
     using Plane_3 = Kernel::Plane_3;
     using Line_3 = Kernel::Line_3;
     using Pline_3 = Parametric_line_3<Kernel, T>;
 
-    using index_t = size_t;
+    using index_t = std::ptrdiff_t;
 
     using mesh_graph_traits = typename boost::graph_traits<SurfaceMesh>;
     using mesh_vertex_descriptor = mesh_graph_traits::vertex_descriptor;
@@ -122,6 +159,7 @@ class SSM_restricted_voronoi_diagram {
     using metric_face_descriptor = metric_graph_traits::face_descriptor;
     using metric_face_iterator = metric_graph_traits::face_iterator;
     using metric_halfedge_descriptor = metric_graph_traits::halfedge_descriptor;
+    using metric_halfedge_descriptor_opt = std::optional<metric_halfedge_descriptor>;
 
     static constexpr T INF = std::numeric_limits<T>::infinity();
 
@@ -129,6 +167,43 @@ class SSM_restricted_voronoi_diagram {
     struct Metric {
         MetricPolyhedron graph;
         MetricVertexPointPMap vpm;
+
+        auto cone_face_bases(metric_halfedge_descriptor hd) const {
+            auto v0 = vpm[source(hd, graph)] - ORIGIN;
+            auto v1 = vpm[target(hd, graph)] - ORIGIN;
+            return std::make_pair(v0, v1);
+        }
+
+        /**
+         * @brief Return the normal of the 2D cone face, pointing inward
+         *
+         * @param hd
+         * @return Vector_3
+         */
+        Vector_3 cone_face_orthogonal_vector(metric_halfedge_descriptor hd) const {
+            // TODO: cache the result
+            auto [v0, v1] = cone_face_bases(hd);
+            Vector_3 n = cross_product(v0, v1);
+            return n;
+        }
+
+        // bool isect(const Pline_3 &l) {
+        //     auto n = m.cone_face_orthogonal_vector(hd);
+        //     FT nd = scalar_product(n, l_inf.d);
+        //     if (is_zero(nd)) {
+        //         // TODO: handle the case that the line lies on the face
+        //         return false;
+        //     }
+
+        //     FT np = scalar_product(n, l_inf.p - ORIGIN);
+        //     FT ti = -np / nd;
+        //     Point_3 pi = l_inf(ti);
+        //     Vector_3 vi = pi - ORIGIN;
+        //     if (!(orientation(n, v0, vi) == POSITIVE && orientation(n, vi, v1) == POSITIVE)) {
+        //         // p_i is outside the 2D cone
+        //         continue;
+        //     }
+        // }
     };
 
     struct Site {
@@ -139,16 +214,17 @@ class SSM_restricted_voronoi_diagram {
     using site_iterator = std::vector<Site>::iterator;
 
     struct Cone_descriptor {
-        index_t site_idx;
+        index_t site_idx = -1;
         metric_face_descriptor face;
 
         bool operator==(const Cone_descriptor &other) const { return site_idx == other.site_idx && face == other.face; }
     };
 
     struct InternalTrace {
-        Plane_3 bisec;
-        mesh_halfedge_descriptor he;
-        Cone_descriptor k0, k1;
+        Pline_3 bisect_line;
+        Plane_3 bisect_plane, face_plane;
+        mesh_halfedge_descriptor face_hd;
+        Cone_descriptor k0, k1, k_prev;
     };
 
     // class Cone_iterator {
@@ -182,13 +258,13 @@ class SSM_restricted_voronoi_diagram {
         // Loop over boundary halfedges
         for (auto bh : halfedges_around_face(bhd, mesh)) {
             auto b_line = Pline_3::segment(vpm[source(bh, mesh)], vpm[target(bh, mesh)]);
-            // auto b_plane = mesh_face_plane(opposite(*bhit, mesh));
+            auto b_plane = mesh_face_plane(opposite(bh, mesh));
             Cone_descriptor k_prev;
 
             // Find all boundary-cone / boundary-bisector intersections
             for (;;) {
                 Pline_3 b_segment;
-                std::optional<metric_halfedge_descriptor> h_min, h_max;
+                metric_halfedge_descriptor_opt h_min, h_max;
                 auto res = isect(k0, b_line, b_segment, h_min, h_max);
                 CGAL_assertion_msg(res, "Boundary must intersect the cone");
 
@@ -227,7 +303,10 @@ class SSM_restricted_voronoi_diagram {
 
                 if (dist_min < INF) {
                     // A 2-site bisector intersects the boundary segment
-                    i_traces.push_back({bi_plane_min, opposite(bh, mesh), k0, k1_min});
+                    auto bisect_dir = cross_product(bi_plane_min.orthogonal_vector(), b_plane.orthogonal_vector());
+                    auto orient = orientation(b_plane.orthogonal_vector(), bisect_dir, b_line.d);
+                    auto bisect_line = Pline_3::ray(b_segment(tb_min), orient == POSITIVE ? bisect_dir : -bisect_dir);
+                    i_traces.push_back({bisect_line, bi_plane_min, b_plane, opposite(bh, mesh), k0, k1_min, {}});
                     // auto bi_dir = cross_product(bi_plane_min.orthogonal_vector(), b_plane.orthogonal_vector());
                     // auto ori = orientation(b_plane.orthogonal_vector(), bi_dir, b_line.d);
                     // auto bisect = Pline_3::ray(b_segment(tb_min), ori == POSITIVE ? bi_dir : -bi_dir);
@@ -327,24 +406,29 @@ class SSM_restricted_voronoi_diagram {
         return Plane_3(n.x(), n.y(), n.z(), d);
     }
 
-    bool isect(const Cone_descriptor &k, const Pline_3 &l, FT &t_min, FT &t_max,
-               std::optional<metric_halfedge_descriptor> &h_min,
-               std::optional<metric_halfedge_descriptor> &h_max) const {
-        auto &[c, m_idx] = sites[k.site_idx];
-        auto &metric = metrics[m_idx];
-        Pline_3 l_inf(ORIGIN + (l.p - c), l.d);
+    struct Cone_face_isect_data {
+        FT t;
+        metric_halfedge_descriptor hd;
+        Vector_3 n;
+        Sign orient;
+    };
+
+    bool isect(const Cone_descriptor &k, const Pline_3 &l, FT &t_min, FT &t_max, metric_halfedge_descriptor_opt &h_min,
+               metric_halfedge_descriptor_opt &h_max) const {
+        auto [c, m] = site(k.site_idx);
+        Pline_3 l_inf(ORIGIN + (l.p - c.point), l.d);
         std::vector<std::tuple<metric_halfedge_descriptor, FT, Sign>> isects;
-        for (auto hd : halfedges_around_face(halfedge(k.face, metric.graph), metric.graph)) {
-            Vector_3 v0 = metric.vpm[source(hd, metric.graph)] - ORIGIN;
-            Vector_3 v1 = metric.vpm[target(hd, metric.graph)] - ORIGIN;
-            Vector_3 n = cross_product(v0, v1);
-            if (is_zero(scalar_product(l_inf.d, n))) {
+        for (auto hd : halfedges_around_face(halfedge(k.face, m.graph), m.graph)) {
+            auto [v0, v1] = m.cone_face_bases(hd);
+            auto n = m.cone_face_orthogonal_vector(hd);
+            FT nd = scalar_product(n, l_inf.d);
+            if (is_zero(nd)) {
                 // TODO: handle the case that the line lies on the face
                 continue;
             }
 
-            FT d_proj = scalar_product(l_inf.p - ORIGIN, n);
-            FT ti = -scalar_product(l_inf.p - ORIGIN, n) / d_proj;
+            FT np = scalar_product(n, l_inf.p - ORIGIN);
+            FT ti = -np / nd;
             Point_3 pi = l_inf(ti);
             Vector_3 vi = pi - ORIGIN;
             if (!(orientation(n, v0, vi) == POSITIVE && orientation(n, vi, v1) == POSITIVE)) {
@@ -352,7 +436,7 @@ class SSM_restricted_voronoi_diagram {
                 continue;
             }
 
-            isects.emplace_back(hd, ti, sign(d_proj));
+            isects.emplace_back(hd, ti, sign(nd));
             if (isects.size() == 2) {
                 break;
             }
@@ -362,12 +446,15 @@ class SSM_restricted_voronoi_diagram {
             return false;
         } else if (isects.size() == 1) {
             auto &[hd, t, sign] = isects.front();
+            // sign: positive: line enters the cone, negative: line leaves the cone
             if (sign == POSITIVE) {
+                // positive half line [t, +inf)
                 t_min = t;
                 h_min = hd;
                 t_max = l.t_max;
                 h_max = std::nullopt;
             } else {
+                // negative half line (-inf, t]
                 t_min = l.t_min;
                 h_min = std::nullopt;
                 t_max = t;
@@ -404,17 +491,125 @@ class SSM_restricted_voronoi_diagram {
         return t_min <= t_max;
     }
 
-    bool isect(const Cone_descriptor &k, const Pline_3 &l, Pline_3 &li,
-               std::optional<metric_halfedge_descriptor> &h_min,
-               std::optional<metric_halfedge_descriptor> &h_max) const {
+    bool isect(const Cone_descriptor &k, const Pline_3 &l, Pline_3 &li, metric_halfedge_descriptor_opt &h_min,
+               metric_halfedge_descriptor_opt &h_max) const {
         li = l;
         return isect(k, l, li.t_min, li.t_max, h_min, h_max);
     }
 
     bool isect(const Cone_descriptor &k, const Pline_3 &l, Pline_3 &li) const {
         li = l;
-        std::optional<metric_halfedge_descriptor> h_min, h_max;
+        metric_halfedge_descriptor_opt h_min, h_max;
         return isect(k, l, li.t_min, li.t_max, h_min, h_max);
+    }
+
+    bool isect(const Cone_descriptor &k0, const Cone_descriptor &k1, const Pline_3 &l, FT &t_min, FT &t_max,
+               index_t &k_min, index_t &k_max, metric_halfedge_descriptor_opt &h_min,
+               metric_halfedge_descriptor_opt &h_max) const {
+        T t0_min, t0_max, t1_min, t1_max;
+        metric_halfedge_descriptor_opt h0_min, h0_max, h1_min, h1_max;
+        if (!isect(k0, l, t0_min, t0_max, h0_min, h0_max) || !isect(k1, l, t1_min, t1_max, h1_min, h1_max)) {
+            return false;
+        }
+        t_min = std::max(t0_min, t1_min);
+        t_max = std::min(t0_max, t1_max);
+        k_min = t0_min < t1_min ? 1 : 0;
+        k_max = t0_max < t1_max ? 0 : 1;
+        h_min = k_min == 0 ? h0_min : h1_min;
+        h_max = k_max == 0 ? h0_max : h1_max;
+        return t_min < t_max;
+    }
+
+    void process_i_trace(const InternalTrace &tr) {
+        auto bi_ray = tr.bisect_line;
+
+        // Clip the bisector ray with the face on mesh
+        bool has_edge_isect = false;
+        mesh_halfedge_descriptor edge_hd;
+        Pline_3 edge;
+        for (auto hd : halfedges_around_face(tr.face_hd, mesh)) {
+            edge = edge_segment<Kernel, T>(hd, mesh, vpm);
+            T t_edge, _;
+            auto res = CGAL::isect(bi_ray, edge, t_edge, _);
+            if (res && !is_zero(t_edge)) {
+                has_edge_isect = true;
+                edge_hd = hd;
+                bi_ray.t_max = t_edge;
+                break;
+            }
+        }
+        CGAL_assertion(has_edge_isect);
+
+        // Clip the bisector ray with the cones
+        index_t k_min, k_max;
+        metric_halfedge_descriptor_opt h_min, h_max;
+        bool has_cone_isect = isect(tr.k0, tr.k1, bi_ray, bi_ray.t_min, bi_ray.t_max, k_min, k_max, h_min, h_max);
+        CGAL_assertion(has_cone_isect);
+
+        // Find the nearest 3-site bisector intersection
+        T dist_min = INF;
+        T tb_min;
+        Plane_3 bi_plane_min;
+        Cone_descriptor k2_min;
+
+        for (index_t site_idx = 0; site_idx < sites.size(); ++site_idx) {
+            if (site_idx == tr.k0.site_idx || site_idx == tr.k1.site_idx) {
+                continue;
+            }
+
+            auto [c, m] = site(site_idx);
+            for (auto fd : faces(m.graph)) {
+                Cone_descriptor k2{site_idx, fd};
+                if (k2 == tr.k_prev) continue;
+
+                Pline_3 s_overlap;
+                if (!isect(k2, bi_ray, s_overlap)) continue;
+
+                Plane_3 bi_plane = get_bisect_plane(tr.k0, k2);
+                if (bi_plane.is_degenerate()) continue;
+
+                T tb;
+                if (!CGAL::isect(s_overlap, bi_plane, tb)) continue;
+
+                auto dist = tb - bi_ray.t_min;
+                CGAL_assertion(dist >= 0);
+
+                if (dist < dist_min) {
+                    dist_min = dist;
+                    tb_min = tb;
+                    bi_plane_min = bi_plane;
+                    k2_min = k2;
+                }
+            }
+        }
+
+        // Find intersection with the boundary
+        // TODO
+
+        if (dist_min < INF) {
+        } else if (h_max) {
+            // The bisector ray intersects the cone
+            auto k0_next = k_max == 0 ? tr.k1 : tr.k0;
+            auto k1_prev = k_max == 0 ? tr.k0 : tr.k1;
+            auto [c1_prev, m1_prev] = site(k1_prev.site_idx);
+            Cone_descriptor k1_next{k1_prev.site_idx, face(opposite(*h_max, m1_prev.graph), m1_prev.graph)};
+            Plane_3 bi_plane = get_bisect_plane(k0_next, k1_next);
+            auto bisect_dir = cross_product(bi_plane.orthogonal_vector(), tr.face_plane.orthogonal_vector());
+            auto n = m1_prev.cone_face_orthogonal_vector(*h_max);
+            if (sign(scalar_product(n, bi_ray.d)) != sign(scalar_product(n, bisect_dir))) {
+                bisect_dir = -bisect_dir;
+            }
+            auto bisect_line = Pline_3::ray(bi_ray.p_max(), bisect_dir);
+            i_traces.push_back({bisect_line, bi_plane, tr.face_plane, edge_hd, k0_next, k1_next, k1_prev});
+        } else {
+            // The bisector leaves the face on mesh
+            auto edge_next_hd = opposite(edge_hd, mesh);
+            auto b_plane = mesh_face_plane(edge_next_hd);
+            auto bisect_dir = cross_product(tr.bisect_plane.orthogonal_vector(), b_plane.orthogonal_vector());
+            auto orient = orientation(b_plane.orthogonal_vector(), bisect_dir, edge.d);
+            auto bisect_line = Pline_3::ray(bi_ray.p_max(), orient == POSITIVE ? bisect_dir : -bisect_dir);
+            i_traces.push_back({bisect_line, tr.bisect_plane, b_plane, edge_next_hd, tr.k0, tr.k1, tr.k_prev});
+        }
     }
 };
 }  // namespace SSM_restricted_voronoi_diagram
