@@ -2,39 +2,34 @@
 
 #include <CGAL/Kernel/global_functions_3.h>
 #include <CGAL/Origin.h>
-#include <CGAL/Simple_cartesian.h>
-#include <CGAL/Surface_mesh.h>
-#include <CGAL/Surface_mesh_parameterization/IO/File_off.h>
-#include <CGAL/Surface_mesh_parameterization/parameterize.h>
-#include <CGAL/Polygon_mesh_processing/measure.h>
-#include <CGAL/Polyhedron_3.h>
 
 #include <CGAL/AABB_tree.h>
 #include <CGAL/AABB_traits.h>
 #include <CGAL/AABB_face_graph_triangle_primitive.h>
-#include <CGAL/boost/graph/graph_traits_Polyhedron_3.h>
-#include <CGAL/boost/graph/graph_traits_Surface_mesh.h>
+
+#include <CGAL/boost/graph/graph_traits_HalfedgeDS_default.h>
 #include <CGAL/boost/graph/iterator.h>
 #include <CGAL/boost/graph/properties.h>
+
 #include <CGAL/config.h>
 #include <CGAL/enum.h>
 #include <CGAL/kernel_assertions.h>
 #include <CGAL/number_utils.h>
 
-#include <cstddef>
 #include <limits>
 #include <unordered_map>
 #include <vector>
 
 namespace CGAL {
 
-typedef CGAL::Simple_cartesian<double> Kernel;
-typedef CGAL::Surface_mesh<Kernel::Point_3> SurfaceMesh;
-typedef CGAL::Polyhedron_3<Kernel> MetricPolyhedron;
-using MeshVertexPointPMap = typename boost::property_map<SurfaceMesh, vertex_point_t>::const_type;
-using MetricVertexPointPMap = typename boost::property_map<MetricPolyhedron, vertex_point_t>::const_type;
-using AABBTree =
-    AABB_tree<AABB_traits<Kernel, AABB_face_graph_triangle_primitive<MetricPolyhedron, Default, Tag_false>>>;
+// typedef CGAL::Simple_cartesian<double> Kernel;
+// typedef CGAL::Surface_mesh<Kernel::Point_3> SurfaceMesh;
+// typedef CGAL::Polyhedron_3<Kernel> MetricPolyhedron;
+// typedef CGAL::Surface_mesh<Kernel::Point_3> VoronoiDiagramGraph;
+
+// using MeshVertexPointPMap = typename boost::property_map<SurfaceMesh, vertex_point_t>::const_type;
+// using MetricVertexPointPMap = typename boost::property_map<MetricPolyhedron, vertex_point_t>::const_type;
+// using VoronoiDiagramVertexPointPMap = typename boost::property_map<VoronoiDiagramGraph, vertex_point_t>::const_type;
 
 template <class Kernel, class T = double>
 struct Parametric_line_3 {
@@ -132,11 +127,11 @@ Parametric_line_3<K, T> edge_segment(typename boost::graph_traits<FaceGraph>::ha
 }
 
 namespace SSM_restricted_voronoi_diagram {
-// template <class Kernel, class MetricPolyhedron, class SurfaceMesh,
-//           class VertexPointPMap = typename boost::property_map<SurfaceMesh, vertex_point_t>::const_type,
-//           class AABBTree =
-//               AABB_tree<AABB_traits<Kernel, AABB_face_graph_triangle_primitive<MetricPolyhedron, Default,
-//               Tag_false>>>>
+template <class Kernel, class MetricPolyhedron, class SurfaceMesh, class VoronoiDiagramGraph,
+          class MeshVertexPointPMap = typename boost::property_map<SurfaceMesh, vertex_point_t>::const_type,
+          class MetricVertexPointPMap = typename boost::property_map<MetricPolyhedron, vertex_point_t>::const_type,
+          class VoronoiDiagramVertexPointPMap =
+              typename boost::property_map<VoronoiDiagramGraph, vertex_point_t>::const_type>
 class SSM_restricted_voronoi_diagram {
    public:
     using FT = Kernel::FT;
@@ -147,6 +142,9 @@ class SSM_restricted_voronoi_diagram {
     using Plane_3 = Kernel::Plane_3;
     using Line_3 = Kernel::Line_3;
     using Pline_3 = Parametric_line_3<Kernel, T>;
+
+    using AABBTree =
+        AABB_tree<AABB_traits<Kernel, AABB_face_graph_triangle_primitive<MetricPolyhedron, Default, Tag_false>>>;
 
     using index_t = std::ptrdiff_t;
 
@@ -206,6 +204,42 @@ class SSM_restricted_voronoi_diagram {
         // }
     };
 
+    struct Voronoi_diagram {
+        using graph_traits = typename boost::graph_traits<VoronoiDiagramGraph>;
+        using vertex_descriptor = graph_traits::vertex_descriptor;
+        using edge_descriptor = graph_traits::edge_descriptor;
+        using halfedge_descriptor = graph_traits::halfedge_descriptor;
+
+        VoronoiDiagramGraph graph;
+        VoronoiDiagramVertexPointPMap vpm;
+
+        halfedge_descriptor opposite(halfedge_descriptor hd) const { return CGAL::opposite(hd, graph); }
+
+        vertex_descriptor add_vertex(const Point_3 &p) {
+            auto vd = CGAL::add_vertex(graph);
+            vpm[vd] = p;
+            return vd;
+        }
+
+        halfedge_descriptor add_ray(vertex_descriptor v) {
+            auto ed = CGAL::add_edge(graph);
+            auto hd = halfedge(ed, graph);
+            set_target(hd, v);
+            return opposite(hd);
+        }
+
+        halfedge_descriptor add_ray(const Point_3 &p) { return add_ray(add_vertex(p)); }
+
+        void set_target(halfedge_descriptor hd, vertex_descriptor v) { CGAL::set_target(hd, v, graph); }
+
+        void set_next(halfedge_descriptor hd, halfedge_descriptor next) { CGAL::set_next(hd, next, graph); }
+
+        void set_next_double_sided(halfedge_descriptor hd, halfedge_descriptor next) {
+            set_next(hd, next);
+            set_next(opposite(hd), opposite(next));
+        }
+    };
+
     struct Site {
         Point_3 point;
         index_t metric_idx;
@@ -220,11 +254,14 @@ class SSM_restricted_voronoi_diagram {
         bool operator==(const Cone_descriptor &other) const { return site_idx == other.site_idx && face == other.face; }
     };
 
+    struct Cone_index {};
+
     struct InternalTrace {
         Pline_3 bisect_line;
         Plane_3 bisect_plane, face_plane;
         mesh_halfedge_descriptor face_hd;
         Cone_descriptor k0, k1, k_prev;
+        Voronoi_diagram::halfedge_descriptor v_hd;
     };
 
     // class Cone_iterator {
@@ -305,8 +342,19 @@ class SSM_restricted_voronoi_diagram {
                     // A 2-site bisector intersects the boundary segment
                     auto bisect_dir = cross_product(bi_plane_min.orthogonal_vector(), b_plane.orthogonal_vector());
                     auto orient = orientation(b_plane.orthogonal_vector(), bisect_dir, b_line.d);
-                    auto bisect_line = Pline_3::ray(b_segment(tb_min), orient == POSITIVE ? bisect_dir : -bisect_dir);
-                    i_traces.push_back({bisect_line, bi_plane_min, b_plane, opposite(bh, mesh), k0, k1_min, {}});
+                    auto pt_start = b_segment(tb_min);
+                    auto bisect_line = Pline_3::ray(pt_start, orient == POSITIVE ? bisect_dir : -bisect_dir);
+                    auto v_hd = vd.add_ray(pt_start);
+                    i_traces.push_back({
+                        bisect_line,
+                        bi_plane_min,
+                        b_plane,
+                        opposite(bh, mesh),
+                        k0,
+                        k1_min,
+                        {},
+                        v_hd,
+                    });
                     // auto bi_dir = cross_product(bi_plane_min.orthogonal_vector(), b_plane.orthogonal_vector());
                     // auto ori = orientation(b_plane.orthogonal_vector(), bi_dir, b_line.d);
                     // auto bisect = Pline_3::ray(b_segment(tb_min), ori == POSITIVE ? bi_dir : -bi_dir);
@@ -335,6 +383,8 @@ class SSM_restricted_voronoi_diagram {
 
     const SurfaceMesh &mesh;
     MeshVertexPointPMap vpm;
+
+    Voronoi_diagram vd;
 
     std::deque<InternalTrace> i_traces;
 
@@ -600,7 +650,20 @@ class SSM_restricted_voronoi_diagram {
                 bisect_dir = -bisect_dir;
             }
             auto bisect_line = Pline_3::ray(bi_ray.p_max(), bisect_dir);
-            i_traces.push_back({bisect_line, bi_plane, tr.face_plane, edge_hd, k0_next, k1_next, k1_prev});
+            auto v_vd = vd.add_vertex(bi_ray.p_max());
+            auto v_hd = vd.add_ray(v_vd);
+            vd.set_target(tr.v_hd, v_vd);
+            vd.set_next_double_sided(tr.v_hd, v_hd);
+            i_traces.push_back({
+                bisect_line,
+                bi_plane,
+                tr.face_plane,
+                edge_hd,
+                k0_next,
+                k1_next,
+                k1_prev,
+                v_hd,
+            });
         } else {
             // The bisector leaves the face on mesh
             auto edge_next_hd = opposite(edge_hd, mesh);
@@ -608,7 +671,20 @@ class SSM_restricted_voronoi_diagram {
             auto bisect_dir = cross_product(tr.bisect_plane.orthogonal_vector(), b_plane.orthogonal_vector());
             auto orient = orientation(b_plane.orthogonal_vector(), bisect_dir, edge.d);
             auto bisect_line = Pline_3::ray(bi_ray.p_max(), orient == POSITIVE ? bisect_dir : -bisect_dir);
-            i_traces.push_back({bisect_line, tr.bisect_plane, b_plane, edge_next_hd, tr.k0, tr.k1, tr.k_prev});
+            auto v_vd = vd.add_vertex(bi_ray.p_max());
+            auto v_hd = vd.add_ray(v_vd);
+            vd.set_target(tr.v_hd, v_vd);
+            vd.set_next_double_sided(tr.v_hd, v_hd);
+            i_traces.push_back({
+                bisect_line,
+                tr.bisect_plane,
+                b_plane,
+                edge_next_hd,
+                tr.k0,
+                tr.k1,
+                tr.k_prev,
+                v_hd,
+            });
         }
     }
 };
