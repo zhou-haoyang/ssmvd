@@ -1,23 +1,27 @@
-#include <ssmrvd.hpp>
 
-#include <CGAL/Kernel/global_functions_3.h>
+// #include <CGAL/Kernel/global_functions_3.h>
+// #include <CGAL/Polygon_mesh_processing/measure.h>
+#include <CGAL/Polygon_mesh_processing/measure.h>
 #include <CGAL/Surface_mesh.h>
 // #include <CGAL/Surface_mesh_parameterization/IO/File_off.h>
 // #include <CGAL/Surface_mesh_parameterization/parameterize.h>
 // #include <CGAL/Polygon_mesh_processing/measure.h>
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+// #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 // #include <CGAL/Random.h>
 // #include <CGAL/Surface_mesh_shortest_path.h>
 #include <CGAL/Barycentric_coordinates_2/triangle_coordinates_2.h>
 
 #include <CGAL/Simple_cartesian.h>
-#include <CGAL/AABB_tree.h>
-#include <CGAL/AABB_traits.h>
+// #include <CGAL/AABB_tree.h>
+// #include <CGAL/AABB_traits.h>
 #include <CGAL/Polyhedron_3.h>
-#include <CGAL/AABB_face_graph_triangle_primitive.h>
+// #include <CGAL/AABB_face_graph_triangle_primitive.h>
 #include <CGAL/convex_hull_3.h>
 
-#include <Eigen/src/Core/Matrix.h>
+#include <ssmrvd.hpp>
+
+#include <Eigen/Dense>
+
 #include <igl/stb/read_image.h>
 #include <igl/stb/write_image.h>
 #include <igl/opengl/glfw/Viewer.h>
@@ -26,14 +30,13 @@
 #include <igl/file_dialog_open.h>
 #include <igl/file_dialog_save.h>
 
-#include <boost/lexical_cast.hpp>
+// #include <boost/lexical_cast.hpp>
 
 #include <cstdlib>
 #include <iostream>
-#include <fstream>
-#include <iterator>
+#include <unordered_map>
 
-typedef CGAL::Exact_predicates_inexact_constructions_kernel Kernel;
+typedef CGAL::Simple_cartesian<double> Kernel;
 typedef Kernel::FT FT;
 typedef Kernel::Point_2 Point_2;
 typedef Kernel::Point_3 Point_3;
@@ -127,6 +130,8 @@ class GVDApp : public App {
     Eigen::MatrixX<uint8_t> tex_r, tex_g, tex_b, tex_a;
     Eigen::MatrixX3<uint8_t> site_colors;
 
+    int mesh_view, vd_view, site_view;
+
     bool load_mesh(const std::string &filename) {
         Eigen::MatrixXd V, TC, N;   // #V by 3, #TC by 2, #N by 3
         Eigen::MatrixXi F, FT, FN;  // #F by 3
@@ -187,14 +192,17 @@ class GVDApp : public App {
             FF.row(i) << i * 3, i * 3 + 1, i * 3 + 2;
         }
 
-        viewer.data().clear();
-        viewer.data().set_mesh(VF, FF);
-        viewer.data().set_colors(Eigen::RowVector3d(1, 1, 1));
-        viewer.data().set_uv(UVF);
-        viewer.data().set_normals(NF);
+        auto &view = viewer.data(mesh_view);
+        view.clear();
+        view.set_mesh(VF, FF);
+        view.set_colors(Eigen::RowVector3d(1, 1, 1));
+        view.set_uv(UVF);
+        view.set_normals(NF);
         igl::stb::read_image("texture.png", tex_r, tex_g, tex_b, tex_a);
-        viewer.data().set_texture(tex_r, tex_g, tex_b, tex_a);
-        viewer.data().show_texture = true;
+        view.set_texture(tex_r, tex_g, tex_b, tex_a);
+        view.show_texture = true;
+
+        gvd.reload();
         return true;
     }
 
@@ -225,15 +233,16 @@ class GVDApp : public App {
         }
         site_colors.setRandom(n_sites, 3);
 
-        viewer.data().set_points(site_pos, Eigen::RowVector3d(0.8, 0, 0));
-        viewer.data().point_size = 10;
+        auto &view = viewer.data(site_view);
+        view.set_points(site_pos, Eigen::RowVector3d(0.8, 0, 0));
+        view.point_size = 10;
         std::vector<std::string> labels;
         for (Index i = 0; i < n_sites; ++i) {
             labels.push_back(std::to_string(i));
         }
-        viewer.data().set_labels(site_pos, labels);
-        viewer.data().show_custom_labels = true;
-        // viewer.data().label_color = Eigen::RowVector4d(0.8, 0, 0, 1);
+        view.set_labels(site_pos, labels);
+        view.show_custom_labels = true;
+        // view.label_color = Eigen::RowVector4d(0.8, 0, 0, 1);
     }
 
     void render_texture() {
@@ -255,8 +264,9 @@ class GVDApp : public App {
             }
         }
 
-        viewer.data().set_texture(tex_r, tex_g, tex_b, tex_a);
-        viewer.data().show_texture = true;
+        auto &view = viewer.data(mesh_view);
+        view.set_texture(tex_r, tex_g, tex_b, tex_a);
+        view.show_texture = true;
     }
 
     Point_2 pixel_idx_to_uv(Index i, Index j) const { return Point_2((i + 0.5) / tex_w, (j + 0.5) / tex_h); }
@@ -310,7 +320,12 @@ class GVDApp : public App {
 
     bool init() override {
         viewer.core().lighting_factor = 0.0;
-        filename = "isosphere.obj";
+
+        mesh_view = viewer.append_mesh();
+        vd_view = viewer.append_mesh();
+        site_view = viewer.append_mesh();
+
+        filename = "isohemisphere.obj";
 
         Eigen::MatrixX3d metrics_3d(4, 3);
         metrics_3d << -1, -1, -1, 1, 1, -1, 1, -1, 1, -1, 1, 1;
@@ -398,15 +413,54 @@ class GVDApp : public App {
                 igl::stb::write_image(path, tex_r, tex_g, tex_b, tex_a);
             }
 
-            if (ImGui::Button("Save Mesh")) {
-                auto path = igl::file_dialog_save();
-                igl::writePLY(path, viewer.data().V, viewer.data().F, viewer.data().V_normals, viewer.data().V_uv);
-            }
+            // if (ImGui::Button("Save Mesh")) {
+            //     auto path = igl::file_dialog_save();
+            //     igl::writePLY(path, viewer.data().V, viewer.data().F, viewer.data().V_normals, viewer.data().V_uv);
+            // }
         }
         return false;
     }
 
-    bool key_pressed(unsigned int key, int mod) override { return false; }
+    void update_vd() {
+        std::unordered_map<vertex_descriptor, Index> v_map;
+        auto &vd = gvd.vd.graph;
+        Eigen::MatrixX3d V(vd.number_of_vertices(), 3);
+        Index i = 0;
+        for (auto v : vd.vertices()) {
+            v_map[v] = i;
+            auto p = vd.point(v);
+            V.row(i) << p.x(), p.y(), p.z();
+            i++;
+        }
+
+        Eigen::MatrixX2i E(vd.number_of_edges(), 2);
+        i = 0;
+        for (auto e : vd.edges()) {
+            auto he = vd.halfedge(e);
+            E.row(i) << v_map[vd.source(he)], v_map[vd.target(he)];
+            i++;
+        }
+
+        auto &view = viewer.data(vd_view);
+        view.set_points(V, Eigen::RowVector3d(0, 0, 1));
+        view.point_size = 10;
+        view.set_edges(V, E, Eigen::RowVector3d(0, 1, 0));
+        view.line_width = 4;
+    }
+
+    bool key_pressed(unsigned int key, int mod) override {
+        switch (key) {
+            case 'b':
+                gvd.trace_boundary(CGAL::Polygon_mesh_processing::longest_border(sm).first);
+                update_vd();
+                break;
+            case 's':
+                gvd.step();
+                update_vd();
+                break;
+        }
+        return false;
+    }
 };
 
 int main(int argc, char **argv) {
