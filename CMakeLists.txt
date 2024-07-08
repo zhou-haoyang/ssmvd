@@ -29,8 +29,9 @@ if(SSM_BUILD_APP)
     FetchContent_MakeAvailable(libigl)
     igl_include(glfw)
     igl_include(imgui)
+    igl_include(stb)
 
-    target_link_libraries(ssm_app PRIVATE ssm igl::core igl::opengl igl::glfw)
+    target_link_libraries(ssm_app PRIVATE ssm igl::core igl::opengl igl::glfw igl::imgui igl::stb)
 endif()
 
 if(SSM_INCLUDE_AUTODIFF)
