@@ -33,3 +33,7 @@
 
 .cache/
 build/
+cmake-build-*/
+
+.idea/
+.vscode/
