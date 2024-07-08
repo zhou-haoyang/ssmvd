@@ -143,8 +143,7 @@ class SSM_restricted_voronoi_diagram {
     using Line_3 = Kernel::Line_3;
     using Pline_3 = Parametric_line_3<Kernel, T>;
 
-    using AABBTree =
-        AABB_tree<AABB_traits<Kernel, AABB_face_graph_triangle_primitive<MetricPolyhedron, Default, Tag_false>>>;
+    using Metric_AABB_tree = AABB_tree<AABB_traits<Kernel, AABB_face_graph_triangle_primitive<MetricPolyhedron>>>;
 
     using index_t = std::ptrdiff_t;
 
@@ -161,10 +160,11 @@ class SSM_restricted_voronoi_diagram {
 
     static constexpr T INF = std::numeric_limits<T>::infinity();
 
-   private:
+    //    private:
     struct Metric {
         MetricPolyhedron graph;
         MetricVertexPointPMap vpm;
+        Metric_AABB_tree tree;
 
         auto cone_face_bases(metric_halfedge_descriptor hd) const {
             auto v0 = vpm[source(hd, graph)] - ORIGIN;
@@ -287,6 +287,21 @@ class SSM_restricted_voronoi_diagram {
     SSM_restricted_voronoi_diagram(const SurfaceMesh &mesh, MeshVertexPointPMap vpm) : mesh(mesh), vpm(vpm) {}
     SSM_restricted_voronoi_diagram(const SurfaceMesh &mesh) : mesh(mesh), vpm(get(vertex_point, mesh)) {}
 
+    void add_site(const Point_3 &p, index_t metric_idx) { sites.push_back({p, metric_idx}); }
+
+    index_t add_metric(const MetricPolyhedron &m, MetricVertexPointPMap vpm) {
+        auto idx = metrics.size();
+        auto [fbegin, fend] = faces(m);
+        metrics.push_back({m, vpm, Metric_AABB_tree(fbegin, fend, m)});
+        return idx;
+    }
+
+    index_t add_metric(const MetricPolyhedron &m) { return add_metric(m, get(vertex_point, m)); }
+
+    void clear_sites() { sites.clear(); }
+
+    void clear_metrics() { metrics.clear(); }
+
     void trace_boundary(mesh_halfedge_descriptor bhd) {
         Cone_descriptor k0;
         find_nearest_site(vpm[source(bhd, mesh)], k0);
@@ -375,11 +390,11 @@ class SSM_restricted_voronoi_diagram {
         }
     }
 
-   private:
+    //    private:
     std::vector<Site> sites;
 
     std::vector<Metric> metrics;
-    AABBTree tree;
+    // AABBTree tree;
 
     const SurfaceMesh &mesh;
     MeshVertexPointPMap vpm;
@@ -398,41 +413,51 @@ class SSM_restricted_voronoi_diagram {
         return {c, metrics[c.metric_idx]};
     }
 
-    void build_tree() {
-        tree.clear();
-        for (auto &metric : metrics) {
-            auto [fbegin, fend] = faces(metric.graph);
-            tree.insert(fbegin, fend, metric.graph);
-        }
-        tree.build();
-    }
+    // void build_tree() {
+    //     tree.clear();
+    //     for (auto &metric : metrics) {
+    //         auto [fbegin, fend] = faces(metric.graph);
+    //         tree.insert(fbegin, fend, metric.graph);
+    //     }
+    //     tree.build();
+    // }
 
-    FT find_nearest_site(const Point_3 &p, Cone_descriptor &m_cone) {
-        build_tree();  // TODO: rebuild only when necessary
-        Ray_3 ray(ORIGIN, p);
-        std::vector<typename AABBTree::template Intersection_and_primitive_id<Ray_3>::Type> intersections;
-        tree.all_intersections(ray, std::back_inserter(intersections));
-        std::unordered_map<const MetricPolyhedron *, std::pair<FT, metric_face_descriptor>> m_weights;
-        for (auto &[obj, m_face] : intersections) {
-            auto &[fd, m_ptr] = m_face;
-            auto isect_pt = boost::get<Point_3>(obj);
-            FT weight = 1.0 / (isect_pt - ORIGIN).squared_length();
-            m_weights[m_ptr] = std::make_pair(weight, fd);
-        }
+    T find_nearest_site(const Point_3 &p, Cone_descriptor &m_cone) const {
+        // build_tree();  // TODO: rebuild only when necessary
+        // Ray_3 ray(ORIGIN, p);
+        // std::vector<typename AABBTree::template Intersection_and_primitive_id<Ray_3>::Type> intersections;
+        // tree.all_intersections(ray, std::back_inserter(intersections));
+        // std::unordered_map<const MetricPolyhedron *, std::pair<FT, metric_face_descriptor>> m_weights;
+        // for (auto &[obj, m_face] : intersections) {
+        //     auto &[fd, m_ptr] = m_face;
+        //     auto isect_pt = boost::get<Point_3>(obj);
+        //     FT weight = 1.0 / (isect_pt - ORIGIN).squared_length();
+        //     m_weights[m_ptr] = std::make_pair(weight, fd);
+        // }
 
-        FT d_min;
+        T d_min = INF;
 
         for (index_t i = 0; i < sites.size(); ++i) {
-            auto &[c, m_idx] = sites[i];
-            auto it = m_weights.find(&metrics[m_idx].graph);
-            if (it == m_weights.end()) {
-                continue;
-            }
-            auto d = approximate_sqrt((p - c).squared_length() * it->second.first);
+            auto [c, m] = site(i);
+            Ray_3 ray(ORIGIN, p - c.point);
+            auto res = m.tree.any_intersection(ray);
+            if (!res) continue;
+
+            auto [obj, fd] = *res;
+            auto pm = boost::get<Point_3>(&obj);
+            if (!pm) continue;
+
+            FT weight = 1.0 / (*pm - ORIGIN).squared_length();
+
+            // auto it = m_weights.find(&metrics[m_idx].graph);
+            // if (it == m_weights.end()) {
+            //     continue;
+            // }
+            auto d = approximate_sqrt((p - c.point).squared_length() * weight);
             if (d < d_min) {
                 d_min = d;
                 m_cone.site_idx = i;
-                m_cone.face = it->second.second;
+                m_cone.face = fd;
             }
         }
         return d_min;
