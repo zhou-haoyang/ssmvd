@@ -8,6 +8,7 @@
 #include <CGAL/AABB_traits.h>
 #include <CGAL/AABB_face_graph_triangle_primitive.h>
 
+#include <CGAL/Polygon_mesh_processing/measure.h>
 #include <CGAL/boost/graph/graph_traits_HalfedgeDS_default.h>
 #include <CGAL/boost/graph/iterator.h>
 #include <CGAL/boost/graph/properties.h>
@@ -16,6 +17,7 @@
 #include <CGAL/enum.h>
 #include <CGAL/kernel_assertions.h>
 #include <CGAL/number_utils.h>
+#include <CGAL/number_utils_classes.h>
 
 #include <limits>
 #include <optional>
@@ -733,6 +735,55 @@ class SSM_restricted_voronoi_diagram {
         // TODO
 
         if (dist_min < INF) {
+            // Found a 3-site bisector
+            auto bisect_dir_02 = cross_product(bi_plane_min.orthogonal_vector(), tr.face_plane.orthogonal_vector());
+            auto [c0, m0] = site(tr.k0.site_idx);
+            auto [c1, m1] = site(tr.k1.site_idx);
+            auto p0 = metric_face_plane(m0, tr.k0.face);
+            auto p1 = metric_face_plane(m1, tr.k1.face);
+            if (is_negative(scalar_product(
+                    bisect_dir_02, p1.orthogonal_vector() / abs(p1.d()) - p0.orthogonal_vector() / abs(p0.d())))) {
+                bisect_dir_02 = -bisect_dir_02;
+            }
+            auto pt_start = bi_ray(tb_min);
+            auto bisect_line_02 = Pline_3::ray(pt_start, bisect_dir_02);
+            auto v_vd = vd.add_vertex(pt_start, Three_site_bisector_info{});
+            vd.set_target(tr.v_hd, v_vd);
+
+            auto v_hd_02 = vd.add_loop(v_vd);
+            i_traces.push_back({
+                bisect_line_02,
+                bi_plane_min,
+                tr.face_plane,
+                edge_hd,
+                std::nullopt,
+                tr.k0,
+                k2_min,
+                tr.k1,
+                v_hd_02,
+            });
+
+            auto bisect_plane_12 = get_bisect_plane(tr.k1, k2_min);
+            CGAL_assertion(!bisect_plane_12.is_degenerate());
+
+            auto bisect_dir_12 = cross_product(bisect_plane_12.orthogonal_vector(), tr.face_plane.orthogonal_vector());
+            if (is_negative(scalar_product(
+                    bisect_dir_12, p0.orthogonal_vector() / abs(p0.d()) - p1.orthogonal_vector() / abs(p1.d())))) {
+                bisect_dir_12 = -bisect_dir_12;
+            }
+            auto bisect_line_12 = Pline_3::ray(pt_start, bisect_dir_12);
+            auto v_hd_12 = vd.add_loop(v_vd);
+            i_traces.push_back({
+                bisect_line_12,
+                bisect_plane_12,
+                tr.face_plane,
+                edge_hd,
+                std::nullopt,
+                tr.k1,
+                k2_min,
+                tr.k0,
+                v_hd_12,
+            });
         } else if (h_max) {
             // The bisector ray intersects the cone
             auto k0_next = k_max == 0 ? tr.k1 : tr.k0;
