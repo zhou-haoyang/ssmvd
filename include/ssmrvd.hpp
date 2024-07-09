@@ -1,5 +1,6 @@
 #pragma once
 
+#include <CGAL/Dynamic_property_map.h>
 #include <CGAL/Kernel/global_functions_3.h>
 #include <CGAL/Origin.h>
 
@@ -160,11 +161,33 @@ class SSM_restricted_voronoi_diagram {
 
     static constexpr T INF = std::numeric_limits<T>::infinity();
 
+    struct Site {
+        Point_3 point;
+        index_t metric_idx;
+    };
+
+    using site_iterator = std::vector<Site>::iterator;
+
+    struct Cone_descriptor {
+        index_t site_idx = -1;
+        metric_face_descriptor face;
+
+        bool operator==(const Cone_descriptor &other) const { return site_idx == other.site_idx && face == other.face; }
+    };
+
+    struct Cone_index {};
+
     //    private:
     struct Metric {
         MetricPolyhedron graph;
         MetricVertexPointPMap vpm;
         Metric_AABB_tree tree;
+
+        Metric(MetricPolyhedron graph, MetricVertexPointPMap vpm) : graph(std::move(graph)), vpm(vpm) {
+            auto [fbegin, fend] = faces(this->graph);
+            tree.insert(fbegin, fend, this->graph);
+            tree.build();
+        }
 
         auto cone_face_bases(metric_halfedge_descriptor hd) const {
             auto v0 = vpm[source(hd, graph)] - ORIGIN;
@@ -204,21 +227,55 @@ class SSM_restricted_voronoi_diagram {
         // }
     };
 
+    enum Vertex_type : std::size_t {
+        BOUNDARY,
+        BOUNDARY_CONE,
+        BOUNDARY_BISCETOR,
+        TWO_SITE_BISECTOR,
+        THREE_SITE_BISECTOR,
+    };
+
+    struct Boundary_vertex_info {
+        mesh_halfedge_descriptor hd;
+        Cone_descriptor k;
+    };
+
+    struct Boundary_cone_info {
+        mesh_halfedge_descriptor hd;
+        Cone_descriptor k;
+    };
+
+    struct Boundary_bisector_info {
+        mesh_halfedge_descriptor hd;
+        Cone_descriptor k0, k1;
+    };
+
+    struct Two_site_bisector_info {};
+
+    struct Three_site_bisector_info {};
+
     struct Voronoi_diagram {
         using graph_traits = typename boost::graph_traits<VoronoiDiagramGraph>;
         using vertex_descriptor = graph_traits::vertex_descriptor;
         using edge_descriptor = graph_traits::edge_descriptor;
         using halfedge_descriptor = graph_traits::halfedge_descriptor;
 
+        using Vertex_info = std::variant<Boundary_vertex_info, Boundary_cone_info, Boundary_bisector_info,
+                                         Two_site_bisector_info, Three_site_bisector_info>;
+        using Vertex_info_property = CGAL::dynamic_vertex_property_t<Vertex_info>;
+        using Vertex_info_map = typename boost::property_map<VoronoiDiagramGraph, Vertex_info_property>::type;
+
         VoronoiDiagramGraph graph;
         VoronoiDiagramVertexPointPMap vpm;
+        Vertex_info_map vertex_info_map;
 
-        Voronoi_diagram() : vpm(get(vertex_point, graph)) {}
+        Voronoi_diagram() : vpm(get(vertex_point, graph)), vertex_info_map(get(Vertex_info_property{}, graph)) {}
         halfedge_descriptor opposite(halfedge_descriptor hd) const { return CGAL::opposite(hd, graph); }
 
-        vertex_descriptor add_vertex(const Point_3 &p) {
+        vertex_descriptor add_vertex(const Point_3 &p, const Vertex_info &info) {
             auto vd = CGAL::add_vertex(graph);
             vpm[vd] = p;
+            put(vertex_info_map, vd, info);
             return vd;
         }
 
@@ -230,7 +287,7 @@ class SSM_restricted_voronoi_diagram {
             return ohd;
         }
 
-        halfedge_descriptor add_loop(const Point_3 &p) { return add_loop(add_vertex(p)); }
+        // halfedge_descriptor add_loop(const Point_3 &p) { return add_loop(add_vertex(p)); }
 
         void set_target(halfedge_descriptor hd, vertex_descriptor v) { CGAL::set_target(hd, v, graph); }
 
@@ -241,22 +298,6 @@ class SSM_restricted_voronoi_diagram {
             set_next(opposite(hd), opposite(next));
         }
     };
-
-    struct Site {
-        Point_3 point;
-        index_t metric_idx;
-    };
-
-    using site_iterator = std::vector<Site>::iterator;
-
-    struct Cone_descriptor {
-        index_t site_idx = -1;
-        metric_face_descriptor face;
-
-        bool operator==(const Cone_descriptor &other) const { return site_idx == other.site_idx && face == other.face; }
-    };
-
-    struct Cone_index {};
 
     struct InternalTrace {
         Pline_3 bisect_line;
@@ -291,14 +332,13 @@ class SSM_restricted_voronoi_diagram {
 
     void add_site(const Point_3 &p, index_t metric_idx) { sites.push_back({p, metric_idx}); }
 
-    index_t add_metric(const MetricPolyhedron &m, MetricVertexPointPMap vpm) {
+    index_t add_metric(MetricPolyhedron m, MetricVertexPointPMap vpm) {
         auto idx = metrics.size();
-        auto [fbegin, fend] = faces(m);
-        metrics.push_back({m, vpm, Metric_AABB_tree(fbegin, fend, m)});
+        metrics.emplace_back(std::move(m), vpm);
         return idx;
     }
 
-    index_t add_metric(const MetricPolyhedron &m) { return add_metric(m, get(vertex_point, m)); }
+    index_t add_metric(MetricPolyhedron m) { return add_metric(m, get(vertex_point, m)); }
 
     void clear_sites() { sites.clear(); }
 
@@ -315,6 +355,8 @@ class SSM_restricted_voronoi_diagram {
                 init = false;
             }
             auto b_line = Pline_3::segment(vpm[source(bh, mesh)], vpm[target(bh, mesh)]);
+            vd.add_vertex(b_line.p_min(), Boundary_vertex_info{bh, k0});
+
             auto b_plane = mesh_face_plane(opposite(bh, mesh));
             Cone_descriptor k_prev;
 
@@ -336,7 +378,7 @@ class SSM_restricted_voronoi_diagram {
                     }
 
                     auto [c, m] = site(site_idx);
-                    for (auto fd : faces(m.graph)) {
+                    for (auto &fd : faces(m.graph)) {
                         Cone_descriptor k1{site_idx, fd};
                         if (k1 == k_prev) continue;
 
@@ -364,7 +406,8 @@ class SSM_restricted_voronoi_diagram {
                     auto orient = orientation(b_plane.orthogonal_vector(), bisect_dir, b_line.d);
                     auto pt_start = b_segment(tb_min);
                     auto bisect_line = Pline_3::ray(pt_start, orient == POSITIVE ? bisect_dir : -bisect_dir);
-                    auto v_hd = vd.add_loop(pt_start);
+                    auto v_vd = vd.add_vertex(pt_start, Boundary_bisector_info{bh, k0, k1_min});
+                    auto v_hd = vd.add_loop(v_vd);
                     i_traces.push_back({
                         bisect_line,
                         bi_plane_min,
@@ -387,7 +430,7 @@ class SSM_restricted_voronoi_diagram {
                     if (!h_max) break;
 
                     // Otherwise switch to the next cone
-                    vd.add_vertex(b_segment.p_max());
+                    vd.add_vertex(b_segment.p_max(), Boundary_cone_info{bh, k0});
                     k_prev = k0;
                     auto [c0, m0] = site(k0.site_idx);
                     k0.face = face(opposite(*h_max, m0.graph), m0.graph);
@@ -693,7 +736,7 @@ class SSM_restricted_voronoi_diagram {
                 bisect_dir = -bisect_dir;
             }
             auto bisect_line = Pline_3::ray(bi_ray.p_max(), bisect_dir);
-            auto v_vd = vd.add_vertex(bi_ray.p_max());
+            auto v_vd = vd.add_vertex(bi_ray.p_max(), Boundary_bisector_info{edge_hd, k0_next, k1_next});
             auto v_hd = vd.add_loop(v_vd);
             vd.set_target(tr.v_hd, v_vd);
             vd.set_next_double_sided(tr.v_hd, v_hd);
@@ -714,7 +757,7 @@ class SSM_restricted_voronoi_diagram {
             auto bisect_dir = cross_product(tr.bisect_plane.orthogonal_vector(), b_plane.orthogonal_vector());
             auto orient = orientation(b_plane.orthogonal_vector(), bisect_dir, edge.d);
             auto bisect_line = Pline_3::ray(bi_ray.p_max(), orient == POSITIVE ? bisect_dir : -bisect_dir);
-            auto v_vd = vd.add_vertex(bi_ray.p_max());
+            auto v_vd = vd.add_vertex(bi_ray.p_max(), Boundary_bisector_info{edge_hd, tr.k0, tr.k1});
             auto v_hd = vd.add_loop(v_vd);
             vd.set_target(tr.v_hd, v_vd);
             vd.set_next_double_sided(tr.v_hd, v_hd);
