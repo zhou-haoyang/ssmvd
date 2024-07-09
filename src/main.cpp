@@ -240,8 +240,10 @@ class GVDApp : public App {
         for (Index i = 0; i < n_sites; ++i) {
             labels.push_back(std::to_string(i));
         }
-        view.set_labels(site_pos, labels);
+        auto VL = site_pos.rowwise() + Eigen::RowVector3d(0, 0, 0.01);
+        view.set_labels(VL, labels);
         view.show_custom_labels = true;
+        view.label_size = 4;
         // view.label_color = Eigen::RowVector4d(0.8, 0, 0, 1);
     }
 
@@ -426,10 +428,21 @@ class GVDApp : public App {
         auto &vd = gvd.vd.graph;
         Eigen::MatrixX3d V(vd.number_of_vertices(), 3);
         Index i = 0;
+        std::vector<std::string> labels;
         for (auto v : vd.vertices()) {
             v_map[v] = i;
             auto p = vd.point(v);
             V.row(i) << p.x(), p.y(), p.z();
+            auto info = get(gvd.vd.vertex_info_map, v);
+            if (auto d = std::get_if<Restricted_voronoi_diagram::Boundary_vertex_info>(&info)) {
+                labels.push_back(std::format("V{}: {}", v.idx(), d->k.site_idx));
+            } else if (auto d = std::get_if<Restricted_voronoi_diagram::Boundary_bisector_info>(&info)) {
+                labels.push_back(std::format("B{}: {} {}", v.idx(), d->k0.site_idx, d->k1.site_idx));
+            } else if (auto d = std::get_if<Restricted_voronoi_diagram::Boundary_cone_info>(&info)) {
+                labels.push_back(std::format("C{}: {}", v.idx(), d->k.site_idx));
+            } else {
+                labels.push_back("");
+            }
             i++;
         }
 
@@ -446,6 +459,10 @@ class GVDApp : public App {
         view.point_size = 10;
         view.set_edges(V, E, Eigen::RowVector3d(0, 1, 0));
         view.line_width = 4;
+        auto VL = V.rowwise() + Eigen::RowVector3d(0, 0, 0.01);
+        view.set_labels(VL, labels);
+        view.show_custom_labels = true;
+        view.label_size = 2;
     }
 
     bool key_pressed(unsigned int key, int mod) override {
@@ -454,8 +471,12 @@ class GVDApp : public App {
                 gvd.trace_boundary(CGAL::Polygon_mesh_processing::longest_border(sm).first);
                 update_vd();
                 break;
-            case 's':
+            case 'g':
                 gvd.step();
+                update_vd();
+                break;
+            case 'r':
+                gvd.reset();
                 update_vd();
                 break;
         }
