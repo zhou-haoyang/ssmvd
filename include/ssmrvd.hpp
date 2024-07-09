@@ -18,6 +18,7 @@
 #include <CGAL/number_utils.h>
 
 #include <limits>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -303,6 +304,7 @@ class SSM_restricted_voronoi_diagram {
         Pline_3 bisect_line;
         Plane_3 bisect_plane, face_plane;
         mesh_halfedge_descriptor face_hd;
+        std::optional<mesh_halfedge_descriptor> prev_hd;
         Cone_descriptor k0, k1, k_prev;
         Voronoi_diagram::halfedge_descriptor v_hd;
     };
@@ -408,11 +410,13 @@ class SSM_restricted_voronoi_diagram {
                     auto bisect_line = Pline_3::ray(pt_start, orient == POSITIVE ? bisect_dir : -bisect_dir);
                     auto v_vd = vd.add_vertex(pt_start, Boundary_bisector_info{bh, k0, k1_min});
                     auto v_hd = vd.add_loop(v_vd);
+                    auto edge_hd = opposite(bh, mesh);
                     i_traces.push_back({
                         bisect_line,
                         bi_plane_min,
                         b_plane,
-                        opposite(bh, mesh),
+                        edge_hd,
+                        edge_hd,
                         k0,
                         k1_min,
                         {},
@@ -440,6 +444,11 @@ class SSM_restricted_voronoi_diagram {
     }
 
     void reload() { vpm = get(vertex_point, mesh); }
+
+    void reset() {
+        vd = Voronoi_diagram();
+        i_traces.clear();
+    }
 
     bool step() {
         if (i_traces.empty()) {
@@ -664,6 +673,7 @@ class SSM_restricted_voronoi_diagram {
         mesh_halfedge_descriptor edge_hd;
         Pline_3 edge;
         for (auto hd : halfedges_around_face(tr.face_hd, mesh)) {
+            if (tr.prev_hd.has_value() && hd == *tr.prev_hd) continue;
             edge = edge_segment<Kernel, T>(hd, mesh, vpm);
             T t_edge, _;
             auto res = CGAL::isect(bi_ray, edge, t_edge, _, true);
@@ -745,6 +755,7 @@ class SSM_restricted_voronoi_diagram {
                 bi_plane,
                 tr.face_plane,
                 edge_hd,
+                std::nullopt,
                 k0_next,
                 k1_next,
                 k1_prev,
@@ -765,6 +776,7 @@ class SSM_restricted_voronoi_diagram {
                 bisect_line,
                 tr.bisect_plane,
                 b_plane,
+                edge_next_hd,
                 edge_next_hd,
                 tr.k0,
                 tr.k1,
