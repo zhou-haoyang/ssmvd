@@ -15,6 +15,8 @@
 // #include <CGAL/AABB_tree.h>
 // #include <CGAL/AABB_traits.h>
 #include <CGAL/Polyhedron_3.h>
+#include <CGAL/Polyhedron_items_with_id_3.h>
+
 // #include <CGAL/AABB_face_graph_triangle_primitive.h>
 #include <CGAL/convex_hull_3.h>
 
@@ -22,6 +24,7 @@
 
 #include <Eigen/Dense>
 
+#include <Eigen/src/Core/Matrix.h>
 #include <igl/stb/read_image.h>
 #include <igl/stb/write_image.h>
 #include <igl/opengl/glfw/Viewer.h>
@@ -43,7 +46,7 @@ typedef Kernel::Point_3 Point_3;
 typedef Kernel::Vector_3 Vector_3;
 typedef Kernel::Triangle_2 Triangle_2;
 typedef CGAL::Surface_mesh<Kernel::Point_3> Triangle_mesh;
-typedef CGAL::Polyhedron_3<Kernel> Metric_polyhedron;
+typedef CGAL::Polyhedron_3<Kernel, CGAL::Polyhedron_items_with_id_3> Metric_polyhedron;
 typedef CGAL::Surface_mesh<Kernel::Point_3> Voronoi_diagram;
 namespace RVD = CGAL::SSM_restricted_voronoi_diagram;
 typedef RVD::SSM_restricted_voronoi_diagram<Kernel, Metric_polyhedron, Triangle_mesh, Voronoi_diagram>
@@ -121,8 +124,8 @@ class GVDApp : public App {
     // Index n_metrics_3d = 4;
     // Eigen::MatrixX3d metrics_3d;
 
-    FT isoline_max = 1;
-    Index isoline_steps = 10;
+    FT isoline_max = 3;
+    Index isoline_steps = 1;
 
     Index tex_w = 256, tex_h = 256;
     Eigen::MatrixX<Index> tex_site;
@@ -130,7 +133,7 @@ class GVDApp : public App {
     Eigen::MatrixX<uint8_t> tex_r, tex_g, tex_b, tex_a;
     Eigen::MatrixX3<uint8_t> site_colors;
 
-    int mesh_view, vd_view, site_view;
+    int mesh_view, vd_view, site_view, trace_view;
 
     bool load_mesh(const std::string &filename) {
         Eigen::MatrixXd V, TC, N;   // #V by 3, #TC by 2, #N by 3
@@ -326,6 +329,7 @@ class GVDApp : public App {
         mesh_view = viewer.append_mesh();
         vd_view = viewer.append_mesh();
         site_view = viewer.append_mesh();
+        trace_view = viewer.append_mesh();
 
         filename = "isohemisphere.obj";
 
@@ -337,6 +341,7 @@ class GVDApp : public App {
             m_points.emplace_back(metrics_3d(i, 0), metrics_3d(i, 1), metrics_3d(i, 2));
         }
         CGAL::convex_hull_3(m_points.begin(), m_points.end(), metric);
+        CGAL::set_halfedgeds_items_id(metric);
         gvd.add_metric(metric);
 
         if (load_mesh(filename)) {
@@ -435,13 +440,15 @@ class GVDApp : public App {
             V.row(i) << p.x(), p.y(), p.z();
             auto info = get(gvd.vd.vertex_info_map, v);
             if (auto d = std::get_if<Restricted_voronoi_diagram::Boundary_vertex_info>(&info)) {
-                labels.push_back(std::format("V{}: {}", v.idx(), d->k.site_idx));
+                labels.push_back(std::format("BV{}: {}", v.idx(), d->k.site_idx));
             } else if (auto d = std::get_if<Restricted_voronoi_diagram::Boundary_bisector_info>(&info)) {
-                labels.push_back(std::format("B{}: {} {}", v.idx(), d->k0.site_idx, d->k1.site_idx));
+                labels.push_back(std::format("E{}: {} {}", v.idx(), d->k0.site_idx, d->k1.site_idx));
             } else if (auto d = std::get_if<Restricted_voronoi_diagram::Boundary_cone_info>(&info)) {
-                labels.push_back(std::format("C{}: {}", v.idx(), d->k.site_idx));
-            } else {
-                labels.push_back("");
+                labels.push_back(std::format("BC{}: {}", v.idx(), d->k.site_idx));
+            } else if (auto d = std::get_if<Restricted_voronoi_diagram::Two_site_bisector_info>(&info)) {
+                labels.push_back(std::format("C{}: {} {}", v.idx(), d->k0.site_idx, d->k1.site_idx));
+            } else if (auto d = std::get_if<Restricted_voronoi_diagram::Three_site_bisector_info>(&info)) {
+                labels.push_back(std::format("T{}: {} {} {}", v.idx(), d->k0.site_idx, d->k1.site_idx, d->k2.site_idx));
             }
             i++;
         }
@@ -465,19 +472,45 @@ class GVDApp : public App {
         view.label_size = 2;
     }
 
+    void update_trace() {
+        Eigen::MatrixX3d V(gvd.i_traces.size() * 2, 3);
+        Eigen::MatrixX2i E(gvd.i_traces.size(), 2);
+
+        for (Index i = 0; i < gvd.i_traces.size(); ++i) {
+            auto &tr = gvd.i_traces[i];
+            auto l = tr.bisect_line;
+            l.t_min = std::max(l.t_min, 0.);
+            l.t_max = std::min(l.t_max, 0.2);
+            V.row(i * 2) << l.p_min().x(), l.p_min().y(), l.p_min().z();
+            V.row(i * 2 + 1) << l.p_max().x(), l.p_max().y(), l.p_max().z();
+            E.row(i) << i * 2, i * 2 + 1;
+        }
+
+        auto &view = viewer.data(trace_view);
+        view.set_edges(V, E, Eigen::RowVector3d(1, 0, 0));
+        view.line_width = 4;
+    }
+
     bool key_pressed(unsigned int key, int mod) override {
         switch (key) {
             case 'b':
                 gvd.trace_boundary(CGAL::Polygon_mesh_processing::longest_border(sm).first);
                 update_vd();
+                update_trace();
                 break;
+            case 'x':
+                gvd.build();
+                update_vd();
+                update_trace();
             case 'g':
                 gvd.step();
                 update_vd();
+                update_trace();
                 break;
             case 'r':
                 gvd.reset();
                 update_vd();
+                update_trace();
                 break;
         }
         return false;
