@@ -85,7 +85,7 @@ class App {
     void launch() {
         viewer.callback_init = [&](auto &viewer) { return init(); };
 
-        viewer.callback_pre_draw = [&](auto &viewer) { return draw(); };
+        viewer.callback_pre_draw = [&](auto &viewer) { return pre_draw(); };
 
         viewer.callback_key_pressed = [&](auto &viewer, unsigned int key, int mod) { return key_pressed(key, mod); };
 
@@ -99,10 +99,34 @@ class App {
     igl::opengl::glfw::imgui::ImGuiMenu menu;
     igl::opengl::glfw::imgui::ImGuiPlugin imgui;
 
+    std::vector<std::pair<std::string, int>> views;
+
     virtual bool init() { return false; }
-    virtual bool draw() { return false; }
-    virtual bool draw_viewer_menu() { return false; }
+    virtual bool pre_draw() { return false; }
+    virtual bool draw_viewer_menu() {
+        menu.draw_viewer_menu();
+
+        if (ImGui::CollapsingHeader("Views", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::InputScalar("Selected Core", ImGuiDataType_U64, &viewer.selected_core_index);
+            ImGui::InputScalar("Selected View", ImGuiDataType_U64, &viewer.selected_data_index);
+            for (auto &[name, view] : views) {
+                bool visible = viewer.data(view).is_visible & (1UL << viewer.selected_core_index);
+                if (ImGui::Checkbox(name.c_str(), &visible)) {
+                    viewer.data(view).set_visible(visible, 1UL << viewer.selected_core_index);
+                }
+            }
+        }
+
+        return false;
+    }
+
     virtual bool key_pressed(unsigned int key, int mod) { return false; }
+
+    int add_view(const std::string &name = "", bool visible = true) {
+        int view = viewer.append_mesh(visible);
+        views.push_back({name, view});
+        return view;
+    }
 };
 
 class GVDApp : public App {
@@ -326,10 +350,10 @@ class GVDApp : public App {
     bool init() override {
         viewer.core().lighting_factor = 0.0;
 
-        mesh_view = viewer.append_mesh();
-        vd_view = viewer.append_mesh();
-        site_view = viewer.append_mesh();
-        trace_view = viewer.append_mesh();
+        mesh_view = add_view("Mesh");
+        vd_view = add_view("VD");
+        site_view = add_view("Sites");
+        trace_view = add_view("Traces");
 
         filename = "isohemisphere.obj";
 
@@ -351,10 +375,10 @@ class GVDApp : public App {
         return false;
     }
 
-    bool draw() override { return false; }
+    bool pre_draw() override { return false; }
 
     bool draw_viewer_menu() override {
-        menu.draw_viewer_menu();
+        App::draw_viewer_menu();
 
         // if (ImGui::CollapsingHeader("Polygon Metrics", ImGuiTreeNodeFlags_DefaultOpen)) {
         //     if (ImGui::InputScalar("Number of Metrics", ImGuiDataType_S64, &n_metrics)) {
