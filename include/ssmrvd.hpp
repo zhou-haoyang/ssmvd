@@ -199,8 +199,8 @@ class SSM_restricted_voronoi_diagram {
         Cone_index k0, k1, k2;
         size_t mesh_face_idx;
 
-        Internal_vertex_id(Cone_index k0, Cone_index k1, Cone_index k2, index_t mesh_face_idx)
-            : k0(k0), k1(k1), k2(k2), mesh_face_idx(mesh_face_idx) {
+        Internal_vertex_id(Cone_index ci0, Cone_index ci1, Cone_index ci2, index_t mesh_face_idx)
+            : k0(ci0), k1(ci1), k2(ci2), mesh_face_idx(mesh_face_idx) {
             if (k0 > k1) std::swap(k0, k1);
             if (k1 > k2) std::swap(k1, k2);
             if (k0 > k1) std::swap(k0, k1);
@@ -226,8 +226,8 @@ class SSM_restricted_voronoi_diagram {
         Cone_index k0, k1;
         size_t mesh_halfedge_idx;
 
-        Boundary_vertex_id(Cone_index k0, Cone_index k1, index_t mesh_halfedge_idx)
-            : k0(k0), k1(k1), mesh_halfedge_idx(mesh_halfedge_idx) {
+        Boundary_vertex_id(Cone_index ci0, Cone_index ci1, index_t mesh_halfedge_idx)
+            : k0(ci0), k1(ci1), mesh_halfedge_idx(mesh_halfedge_idx) {
             if (k0 > k1) std::swap(k0, k1);
         }
 
@@ -524,7 +524,7 @@ class SSM_restricted_voronoi_diagram {
                         {},
                         v_vd,
                     });
-                    Boundary_vertex_id bvid{cone_index(k0), cone_index(k1_min), edge_index_map[edge(edge_hd, mesh)]};
+                    Boundary_vertex_id bvid(cone_index(k0), cone_index(k1_min), edge_index_map[edge(edge_hd, mesh)]);
                     b_vert_map[bvid] = v_vd;
                     // auto bi_dir = cross_product(bi_plane_min.orthogonal_vector(), b_plane.orthogonal_vector());
                     // auto ori = orientation(b_plane.orthogonal_vector(), bi_dir, b_line.d);
@@ -860,7 +860,7 @@ class SSM_restricted_voronoi_diagram {
         auto face_id = face_index_map[face(tr.face_hd, mesh)];
         if (dist_min < INF) {
             // Found a 3-site bisector
-            Internal_vertex_id vid{cone_index(tr.k0), cone_index(tr.k1), cone_index(k2_min), face_id};
+            Internal_vertex_id vid(cone_index(tr.k0), cone_index(tr.k1), cone_index(k2_min), face_id);
             if (auto vd_it = vert_map.find(vid); vd_it != vert_map.cend()) {
                 vd.connect(tr.v_vd, vd_it->second);
                 return;
@@ -921,7 +921,7 @@ class SSM_restricted_voronoi_diagram {
             auto k1_prev = k_max == 0 ? tr.k0 : tr.k1;
             auto [c1_prev, m1_prev] = site(k1_prev.site_idx);
             Cone_descriptor k1_next{k1_prev.site_idx, face(opposite(*h_max, m1_prev.graph), m1_prev.graph)};
-            Internal_vertex_id vid{cone_index(k0_next), cone_index(k1_next), cone_index(k1_prev), face_id};
+            Internal_vertex_id vid(cone_index(k0_next), cone_index(k1_next), cone_index(k1_prev), face_id);
             if (auto vd_it = vert_map.find(vid); vd_it != vert_map.cend()) {
                 vd.connect(tr.v_vd, vd_it->second);
                 return;
@@ -953,7 +953,7 @@ class SSM_restricted_voronoi_diagram {
             });
         } else {
             // The bisector leaves the face on mesh
-            Boundary_vertex_id bvid{cone_index(tr.k0), cone_index(tr.k1), edge_index_map[CGAL::edge(edge_hd, mesh)]};
+            Boundary_vertex_id bvid(cone_index(tr.k0), cone_index(tr.k1), edge_index_map[CGAL::edge(edge_hd, mesh)]);
             if (auto vd_it = b_vert_map.find(bvid); vd_it != b_vert_map.cend()) {
                 vd.connect(tr.v_vd, vd_it->second);
                 return;
