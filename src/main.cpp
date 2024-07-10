@@ -293,6 +293,8 @@ class GVDApp : public App {
             }
         }
 
+        tex_nnaa(5);
+
         auto &view = viewer.data(mesh_view);
         view.set_texture(tex_r, tex_g, tex_b, tex_a);
         view.show_texture = true;
@@ -306,6 +308,73 @@ class GVDApp : public App {
     }
 
     auto pixel_uv_to_idx(const Point_2 &uv) const { return pixel_uv_to_idx(uv.x(), uv.y()); }
+
+    void tex_box_aa(Index radius) {
+        auto tex_r_new = tex_r, tex_g_new = tex_g, tex_b_new = tex_b, tex_a_new = tex_a;
+
+        auto L = 2 * radius + 1, A = L * L;
+        for (Index i = 0; i < tex_w; ++i) {
+            for (Index j = 0; j < tex_h; ++j) {
+                if (tex_a(i, j) > 0) {
+                    continue;
+                }
+                for (Index di = -radius; di <= radius; ++di) {
+                    for (Index dj = -radius; dj <= radius; ++dj) {
+                        Index ii = i + di, jj = j + dj;
+                        if (ii < 0 || ii >= tex_w || jj < 0 || jj >= tex_h) {
+                            continue;
+                        }
+                        if (tex_a(ii, jj) > 0) {
+                            tex_r_new(i, j) += tex_r(ii, jj) / A;
+                            tex_g_new(i, j) += tex_g(ii, jj) / A;
+                            tex_b_new(i, j) += tex_b(ii, jj) / A;
+                            tex_a_new(i, j) += tex_a(ii, jj) / A;
+                        }
+                    }
+                }
+            }
+        }
+
+        tex_r = tex_r_new;
+        tex_g = tex_g_new;
+        tex_b = tex_b_new;
+        tex_a = tex_a_new;
+    }
+
+    void tex_nnaa(Index radius) {
+        auto tex_r_new = tex_r, tex_g_new = tex_g, tex_b_new = tex_b, tex_a_new = tex_a;
+
+        auto L = 2 * radius + 1, A = L * L;
+        for (Index i = 0; i < tex_w; ++i) {
+            for (Index j = 0; j < tex_h; ++j) {
+                if (tex_a(i, j) > 0) {
+                    continue;
+                }
+                Index d_min = std::numeric_limits<Index>::max();
+                for (Index di = -radius; di <= radius; ++di) {
+                    for (Index dj = -radius; dj <= radius; ++dj) {
+                        Index d = std::abs(di) + std::abs(dj);
+                        Index ii = i + di, jj = j + dj;
+                        if (ii < 0 || ii >= tex_w || jj < 0 || jj >= tex_h) {
+                            continue;
+                        }
+                        if (tex_a(ii, jj) > 0 && d < d_min) {
+                            d_min = d;
+                            tex_r_new(i, j) = tex_r(ii, jj);
+                            tex_g_new(i, j) = tex_g(ii, jj);
+                            tex_b_new(i, j) = tex_b(ii, jj);
+                            tex_a_new(i, j) = tex_a(ii, jj);
+                        }
+                    }
+                }
+            }
+        }
+
+        tex_r = tex_r_new;
+        tex_g = tex_g_new;
+        tex_b = tex_b_new;
+        tex_a = tex_a_new;
+    }
 
     void gen_tex_rvd() {
         tex_site = Eigen::MatrixX<Index>::Constant(tex_w, tex_h, -1);
@@ -517,11 +586,13 @@ class GVDApp : public App {
 
     bool key_pressed(unsigned int key, int mod) override {
         switch (key) {
-            case 'b':
-                gvd.trace_boundary(CGAL::Polygon_mesh_processing::longest_border(sm).first);
+            case 'b': {
+                auto [hd, _] = CGAL::Polygon_mesh_processing::longest_border(sm);
+                auto [begin, end] = sm.halfedges_around_face(hd);
+                gvd.trace_boundary(begin, end);
                 update_vd();
                 update_trace();
-                break;
+            } break;
             case 'x':
                 gvd.build();
                 update_vd();
