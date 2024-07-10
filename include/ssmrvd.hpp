@@ -448,12 +448,14 @@ class SSM_restricted_voronoi_diagram {
 
     void clear_metrics() { metrics.clear(); }
 
-    void trace_boundary(mesh_halfedge_descriptor bhd) {
+    template <class MeshHalfedgeIter>
+    void trace_boundary(MeshHalfedgeIter h_begin, MeshHalfedgeIter h_end) {
         Cone_descriptor k0;
         // auto [bhit, bhit_end] = halfedges_around_face(bhd, mesh);
         bool init = true;
         // Loop over boundary halfedges
-        for (auto bh : halfedges_around_face(bhd, mesh)) {
+        for (MeshHalfedgeIter h_it = h_begin; h_it != h_end; ++h_it) {
+            auto bh = *h_it;
             if (init) {
                 find_nearest_site(vpm[source(bh, mesh)], k0);
                 init = false;
