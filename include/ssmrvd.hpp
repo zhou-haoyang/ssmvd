@@ -119,7 +119,7 @@ template <class Kernel, class FaceGraph, class VPMap>
 Kernel::Plane_3 supporting_plane(typename boost::graph_traits<FaceGraph>::halfedge_descriptor hd, const FaceGraph &g,
                                  const VPMap &vpm) {
     auto i0 = source(hd, g), i1 = target(hd, g), i2 = target(next(hd, g), g);
-    auto v0 = vpm[i0], v1 = vpm[i1], v2 = vpm[i2];
+    auto v0 = get(vpm, i0), v1 = get(vpm, i1), v2 = get(vpm, i2);
     return {v0, v1, v2};
 }
 
@@ -127,7 +127,7 @@ template <class K, class T, class FaceGraph, class VPMap>
 Parametric_line_3<K, T> edge_segment(typename boost::graph_traits<FaceGraph>::halfedge_descriptor hd,
                                      const FaceGraph &g, const VPMap &vpm) {
     auto i0 = source(hd, g), i1 = target(hd, g);
-    return Parametric_line_3<K, T>::segment(vpm[i0], vpm[i1]);
+    return Parametric_line_3<K, T>::segment(get(vpm, i0), get(vpm, i1));
 }
 
 namespace SSM_restricted_voronoi_diagram {
@@ -268,8 +268,8 @@ class SSM_restricted_voronoi_diagram {
         }
 
         auto cone_face_bases(metric_halfedge_descriptor hd) const {
-            auto v0 = vpm[source(hd, graph)] - ORIGIN;
-            auto v1 = vpm[target(hd, graph)] - ORIGIN;
+            auto v0 = get(vpm, source(hd, graph)) - ORIGIN;
+            auto v1 = get(vpm, target(hd, graph)) - ORIGIN;
             return std::make_pair(v0, v1);
         }
 
@@ -358,7 +358,7 @@ class SSM_restricted_voronoi_diagram {
 
         vertex_descriptor add_vertex(const Point_3 &p, const Vertex_info &info) {
             auto vd = CGAL::add_vertex(graph);
-            vpm[vd] = p;
+            get(vpm, vd) = p;
             put(vertex_info_map, vd, info);
             return vd;
         }
@@ -457,10 +457,10 @@ class SSM_restricted_voronoi_diagram {
         for (MeshHalfedgeIter h_it = h_begin; h_it != h_end; ++h_it) {
             auto bh = *h_it;
             if (init) {
-                find_nearest_site(vpm[source(bh, mesh)], k0);
+                find_nearest_site(get(vpm, source(bh, mesh)), k0);
                 init = false;
             }
-            auto b_line = Pline_3::segment(vpm[source(bh, mesh)], vpm[target(bh, mesh)]);
+            auto b_line = Pline_3::segment(get(vpm, source(bh, mesh)), get(vpm, target(bh, mesh)));
             vd.add_vertex(b_line.p_min(), Boundary_vertex_info{bh, k0});
 
             auto b_plane = mesh_face_plane(opposite(bh, mesh));
@@ -526,7 +526,8 @@ class SSM_restricted_voronoi_diagram {
                         {},
                         v_vd,
                     });
-                    Boundary_vertex_id bvid(cone_index(k0), cone_index(k1_min), edge_index_map[edge(edge_hd, mesh)]);
+                    Boundary_vertex_id bvid(cone_index(k0), cone_index(k1_min),
+                                            get(edge_index_map, edge(edge_hd, mesh)));
                     b_vert_map[bvid] = v_vd;
                     // auto bi_dir = cross_product(bi_plane_min.orthogonal_vector(), b_plane.orthogonal_vector());
                     // auto ori = orientation(b_plane.orthogonal_vector(), bi_dir, b_line.d);
@@ -859,7 +860,7 @@ class SSM_restricted_voronoi_diagram {
         // Find intersection with the boundary
         // TODO
 
-        auto face_id = face_index_map[face(tr.face_hd, mesh)];
+        auto face_id = get(face_index_map, face(tr.face_hd, mesh));
         if (dist_min < INF) {
             // Found a 3-site bisector
             Internal_vertex_id vid(cone_index(tr.k0), cone_index(tr.k1), cone_index(k2_min), face_id);
@@ -955,7 +956,8 @@ class SSM_restricted_voronoi_diagram {
             });
         } else {
             // The bisector leaves the face on mesh
-            Boundary_vertex_id bvid(cone_index(tr.k0), cone_index(tr.k1), edge_index_map[CGAL::edge(edge_hd, mesh)]);
+            Boundary_vertex_id bvid(cone_index(tr.k0), cone_index(tr.k1),
+                                    get(edge_index_map, CGAL::edge(edge_hd, mesh)));
             if (auto vd_it = b_vert_map.find(bvid); vd_it != b_vert_map.cend()) {
                 vd.connect(tr.v_vd, vd_it->second);
                 return;
