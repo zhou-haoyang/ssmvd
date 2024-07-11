@@ -16,8 +16,11 @@
 // #include <CGAL/AABB_traits.h>
 #include <CGAL/Polyhedron_3.h>
 #include <CGAL/Polyhedron_items_with_id_3.h>
+#include <CGAL/boost/graph/Seam_mesh.h>
 
 // #include <CGAL/AABB_face_graph_triangle_primitive.h>
+#include <CGAL/boost/graph/helpers.h>
+#include <CGAL/boost/graph/iterator.h>
 #include <CGAL/convex_hull_3.h>
 
 #include <ssmrvd.hpp>
@@ -45,18 +48,27 @@ typedef Kernel::Point_2 Point_2;
 typedef Kernel::Point_3 Point_3;
 typedef Kernel::Vector_3 Vector_3;
 typedef Kernel::Triangle_2 Triangle_2;
-typedef CGAL::Surface_mesh<Kernel::Point_3> Triangle_mesh;
+typedef CGAL::Surface_mesh<Kernel::Point_3> Surface_mesh;
+typedef boost::graph_traits<Surface_mesh> SM_Graph_traits;
+typedef SM_Graph_traits::vertex_descriptor SM_vertex_descriptor;
+typedef SM_Graph_traits::edge_descriptor SM_edge_descriptor;
+typedef SM_Graph_traits::halfedge_descriptor SM_halfedge_descriptor;
+typedef SM_Graph_traits::face_descriptor SM_face_descriptor;
+
+typedef Surface_mesh::Property_map<SM_edge_descriptor, bool> Seam_edge_pmap;
+typedef Surface_mesh::Property_map<SM_vertex_descriptor, bool> Seam_vertex_pmap;
+typedef CGAL::Seam_mesh<Surface_mesh, Seam_edge_pmap, Seam_vertex_pmap> Seam_mesh;
 typedef CGAL::Polyhedron_3<Kernel, CGAL::Polyhedron_items_with_id_3> Metric_polyhedron;
 typedef CGAL::Surface_mesh<Kernel::Point_3> Voronoi_diagram;
 namespace RVD = CGAL::SSM_restricted_voronoi_diagram;
-typedef RVD::SSM_restricted_voronoi_diagram<Kernel, Metric_polyhedron, Triangle_mesh, Voronoi_diagram>
+typedef RVD::SSM_restricted_voronoi_diagram<Kernel, Metric_polyhedron, Surface_mesh, Voronoi_diagram>
     Restricted_voronoi_diagram;
 typedef Restricted_voronoi_diagram::Cone_descriptor Cone_descriptor;
-typedef boost::graph_traits<Triangle_mesh> Graph_traits;
-typedef Graph_traits::vertex_iterator vertex_iterator;
-typedef Graph_traits::vertex_descriptor vertex_descriptor;
-typedef Graph_traits::face_iterator face_iterator;
-typedef Graph_traits::face_descriptor face_descriptor;
+typedef boost::graph_traits<Seam_mesh> Graph_traits;
+// typedef Graph_traits::vertex_iterator vertex_iterator;
+// typedef Graph_traits::vertex_descriptor vertex_descriptor;
+// typedef Graph_traits::face_iterator face_iterator;
+// typedef Graph_traits::face_descriptor face_descriptor;
 typedef Graph_traits::halfedge_descriptor halfedge_descriptor;
 using Index = std::ptrdiff_t;
 
@@ -135,7 +147,9 @@ class GVDApp : public App {
 
    protected:
     // TextureGenerator gvd;
-    Triangle_mesh sm;
+    Surface_mesh sm;
+    SM_halfedge_descriptor seam_hd;
+
     Metric_polyhedron metric;
     Restricted_voronoi_diagram gvd;
 
@@ -167,11 +181,17 @@ class GVDApp : public App {
             return false;
         }
 
-        sm = Triangle_mesh();
-        auto [uv_pmap, uv_new] = sm.add_property_map<halfedge_descriptor, Point_2>("h:uv");
-        auto [n_pmap, n_new] = sm.add_property_map<halfedge_descriptor, Vector_3>("h:n");
+        // mesh = Surface_mesh();
+        // sm = Triangle_mesh();
+        sm.clear();
+        seam_hd.reset();
+        Index n_vertices = V.rows(), n_faces = F.rows(), n_edges = n_vertices + n_faces - 2;
+        sm.reserve(n_vertices, n_edges, n_faces);
 
-        std::vector<vertex_descriptor> v_map(V.rows());
+        auto uv_pmap = sm.add_property_map<SM_halfedge_descriptor, Point_2>("h:uv").first;
+        auto n_pmap = sm.add_property_map<SM_halfedge_descriptor, Vector_3>("h:n").first;
+
+        std::vector<SM_vertex_descriptor> v_map(V.rows());
         for (Index i = 0; i < V.rows(); ++i) {
             v_map[i] = sm.add_vertex(Point_3(V(i, 0), V(i, 1), V(i, 2)));
         }
@@ -183,7 +203,7 @@ class GVDApp : public App {
 
             if (TC.rows() > 0 && FT.rows() > 0) {
                 Eigen::RowVector2d uv0 = TC.row(FT(i, 0)), uv1 = TC.row(FT(i, 1)), uv2 = TC.row(FT(i, 2));
-                std::unordered_map<vertex_descriptor, Point_2> uv_map{
+                std::unordered_map<SM_vertex_descriptor, Point_2> uv_map{
                     {v0, Point_2(uv0.x(), uv0.y())}, {v1, Point_2(uv1.x(), uv1.y())}, {v2, Point_2(uv2.x(), uv2.y())}};
                 uv_pmap[h0] = uv_map[sm.source(h0)];
                 uv_pmap[h1] = uv_map[sm.target(h0)];
@@ -229,18 +249,18 @@ class GVDApp : public App {
         view.set_texture(tex_r, tex_g, tex_b, tex_a);
         view.show_texture = true;
 
-        gvd.reload();
+        // gvd.reload();
         return true;
     }
 
-    auto triangle_vert_idx(face_descriptor f) const {
+    auto triangle_vert_idx(SM_face_descriptor f) const {
         auto h = sm.halfedge(f);
         return std::make_tuple(sm.source(h), sm.target(h), sm.target(sm.next(h)));
     }
 
     void random_sites() {
         auto [fbegin, fend] = sm.faces();
-        std::vector<face_descriptor> faces(fbegin, fend);
+        std::vector<SM_face_descriptor> faces(fbegin, fend);
 
         Eigen::VectorXi face_idx = Eigen::ArrayXi::Random(n_sites);
         Eigen::MatrixX2d bary = (Eigen::ArrayX2d::Random(n_sites, 2) + 1) / 2;
@@ -380,12 +400,12 @@ class GVDApp : public App {
         tex_site = Eigen::MatrixX<Index>::Constant(tex_w, tex_h, -1);
         tex_dist = Eigen::MatrixX<FT>::Zero(tex_w, tex_h);
 
-        auto [uv_map, uv_exist] = sm.property_map<halfedge_descriptor, Point_2>("h:uv");
+        auto [uv_map, uv_exist] = sm.property_map<SM_halfedge_descriptor, Point_2>("h:uv");
         assert(uv_exist);
 
         for (auto face : sm.faces()) {
             auto h0 = sm.halfedge(face), h1 = sm.next(h0), h2 = sm.next(h1);
-            vertex_descriptor i0 = sm.source(h0), i1 = sm.target(h0), i2 = sm.target(h1);
+            SM_vertex_descriptor i0 = sm.source(h0), i1 = sm.target(h0), i2 = sm.target(h1);
             Point_3 p0 = sm.point(i0), p1 = sm.point(i1), p2 = sm.point(i2);
             Point_2 uv0 = uv_map[h0], uv1 = uv_map[h1], uv2 = uv_map[h2];
 
@@ -488,6 +508,18 @@ class GVDApp : public App {
                 load_mesh(filename);
             }
 
+            if (ImGui::Button("Load Seams")) {
+                auto path = igl::file_dialog_open();
+                Seam_edge_pmap seam_edge_map;
+                Seam_vertex_pmap seam_vertex_map;
+
+                seam_edge_map = sm.add_property_map<SM_edge_descriptor, bool>("e:on_seam", false).first;
+                seam_vertex_map = sm.add_property_map<SM_vertex_descriptor, bool>("v:on_seam", false).first;
+
+                Seam_mesh seam_mesh(sm, seam_edge_map, seam_vertex_map);
+                seam_hd = seam_mesh.add_seams(path.c_str());
+            }
+
             ImGui::InputScalar("Number of Sites", ImGuiDataType_S64, &n_sites);
 
             if (ImGui::Button("Random Sites")) {
@@ -522,7 +554,7 @@ class GVDApp : public App {
     }
 
     void update_vd() {
-        std::unordered_map<vertex_descriptor, Index> v_map;
+        std::unordered_map<SM_vertex_descriptor, Index> v_map;
         auto &vd = gvd.vd.graph;
         Eigen::MatrixX3d V(vd.number_of_vertices(), 3);
         Index i = 0;
@@ -584,12 +616,29 @@ class GVDApp : public App {
         view.line_width = 4;
     }
 
+    auto trace_boundary() {
+        // SM_halfedge_descriptor hd;
+        if (seam_hd.is_valid()) {
+            halfedge_descriptor shd = seam_hd;
+            auto seam_edge_map = sm.property_map<SM_edge_descriptor, bool>("e:on_seam").first;
+            auto seam_vertex_map = sm.property_map<SM_vertex_descriptor, bool>("v:on_seam").first;
+            Seam_mesh seam_mesh(sm, seam_edge_map, seam_vertex_map);
+            auto [begin, end] = CGAL::halfedges_around_face(CGAL::opposite(shd, seam_mesh), seam_mesh);
+            gvd.trace_boundary(begin, end);
+        } else if (CGAL::is_closed(sm)) {
+            auto hd = CGAL::Polygon_mesh_processing::longest_border(sm).first;
+            auto [begin, end] = sm.halfedges_around_face(hd);
+            gvd.trace_boundary(begin, end);
+        }
+        // if (!hd.is_valid()) {
+        //     return;
+        // }
+    }
+
     bool key_pressed(unsigned int key, int mod) override {
         switch (key) {
             case 'b': {
-                auto [hd, _] = CGAL::Polygon_mesh_processing::longest_border(sm);
-                auto [begin, end] = sm.halfedges_around_face(hd);
-                gvd.trace_boundary(begin, end);
+                trace_boundary();
                 update_vd();
                 update_trace();
             } break;
