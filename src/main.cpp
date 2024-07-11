@@ -153,8 +153,7 @@ class GVDApp : public App {
     Metric_polyhedron metric;
     Restricted_voronoi_diagram gvd;
 
-    std::string filename;
-    Index n_sites = 10;
+    Index n_sites = 100;
     // Index n_metrics = 0;
     // Index dir_path_idx = -2;
     // Eigen::VectorXd metrics_r, metrics_theta;
@@ -186,6 +185,7 @@ class GVDApp : public App {
         sm.clear();
         seam_hd.reset();
         Index n_vertices = V.rows(), n_faces = F.rows(), n_edges = n_vertices + n_faces - 2;
+        if (n_vertices == 0 || n_faces == 0) return false;
         sm.reserve(n_vertices, n_edges, n_faces);
 
         auto uv_pmap = sm.add_property_map<SM_halfedge_descriptor, Point_2>("h:uv").first;
@@ -436,15 +436,22 @@ class GVDApp : public App {
         render_texture();
     }
 
+    auto load_seam(const std::string &path) {
+        auto [seam_edge_map, new_seam_edge_map] = sm.add_property_map<SM_edge_descriptor, bool>("e:on_seam", false);
+        auto [seam_vertex_map, new_seam_vertex_map] =
+            sm.add_property_map<SM_vertex_descriptor, bool>("v:on_seam", false);
+
+        Seam_mesh seam_mesh(sm, seam_edge_map, seam_vertex_map);
+        return seam_mesh.add_seams(path.c_str());
+    }
+
     bool init() override {
-        viewer.core().lighting_factor = 0.0;
+        // viewer.core().lighting_factor = 0.0;
 
         mesh_view = add_view("Mesh");
         vd_view = add_view("VD");
         site_view = add_view("Sites");
         trace_view = add_view("Traces");
-
-        filename = "isohemisphere.obj";
 
         Eigen::MatrixX3d metrics_3d(4, 3);
         metrics_3d << -1, -1, -1, 1, 1, -1, 1, -1, 1, -1, 1, 1;
@@ -457,8 +464,9 @@ class GVDApp : public App {
         CGAL::set_halfedgeds_items_id(metric);
         gvd.add_metric(metric);
 
-        if (load_mesh(filename)) {
+        if (load_mesh("bunny.obj")) {
             random_sites();
+            seam_hd = load_seam("bunny.selection.txt");
         }
 
         return false;
@@ -499,25 +507,14 @@ class GVDApp : public App {
         // }
 
         if (ImGui::CollapsingHeader("VD", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::InputText("filename", filename);
             if (ImGui::Button("Open Mesh")) {
-                filename = igl::file_dialog_open();
-                load_mesh(filename);
-            }
-            if (ImGui::Button("Load Mesh")) {
+                auto filename = igl::file_dialog_open();
                 load_mesh(filename);
             }
 
             if (ImGui::Button("Load Seams")) {
                 auto path = igl::file_dialog_open();
-                Seam_edge_pmap seam_edge_map;
-                Seam_vertex_pmap seam_vertex_map;
-
-                seam_edge_map = sm.add_property_map<SM_edge_descriptor, bool>("e:on_seam", false).first;
-                seam_vertex_map = sm.add_property_map<SM_vertex_descriptor, bool>("v:on_seam", false).first;
-
-                Seam_mesh seam_mesh(sm, seam_edge_map, seam_vertex_map);
-                seam_hd = seam_mesh.add_seams(path.c_str());
+                seam_hd = load_seam(path);
             }
 
             ImGui::InputScalar("Number of Sites", ImGuiDataType_S64, &n_sites);
