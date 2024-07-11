@@ -981,7 +981,7 @@ class SSM_restricted_voronoi_diagram {
                 edge_next_hd,
                 tr.k0,
                 tr.k1,
-                tr.k_prev,
+                {},
                 v_vd,
             });
         }
