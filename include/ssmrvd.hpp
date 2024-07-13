@@ -354,26 +354,82 @@ class SSM_restricted_voronoi_diagram {
         Vertex_info_map vertex_info_map;
 
         Voronoi_diagram() : vpm(get(vertex_point, graph)), vertex_info_map(get(Vertex_info_property{}, graph)) {}
-        halfedge_descriptor opposite(halfedge_descriptor hd) const { return CGAL::opposite(hd, graph); }
+        // halfedge_descriptor opposite(halfedge_descriptor hd) const { return CGAL::opposite(hd, graph); }
 
         vertex_descriptor add_vertex(const Point_3 &p, const Vertex_info &info) {
             auto vd = CGAL::add_vertex(graph);
-            get(vpm, vd) = p;
+            put(vpm, vd, p);
             put(vertex_info_map, vd, info);
+
+            // Create a loop halfedge around the vertex to fulfill the HE data structure
+            auto ed = CGAL::add_edge(graph);
+            auto hd = halfedge(ed, graph), ohd = opposite(hd, graph);
+            set_target(hd, vd, graph);
+            set_target(ohd, vd, graph);
+
+            set_halfedge(vd, hd, graph);
+
+            set_next(hd, ohd, graph);
+            set_next(ohd, hd, graph);
             return vd;
         }
 
+        void insert_halfedge_loop(vertex_descriptor v, halfedge_descriptor hd) {
+            // TODO
+            auto hd_insert = halfedge(v, graph);
+            set_next(hd, next(hd_insert, graph), graph);
+            set_next(hd_insert, opposite(hd, graph), graph);
+        }
+
         halfedge_descriptor connect(vertex_descriptor v0, vertex_descriptor v1) {
-            // for (auto v : halfedges_around_source(v0, graph)) {
-            //     if (target(v, graph) == v1) return v;
-            // }
+            for (auto hd : halfedges_around_target(v1, graph)) {
+                if (source(hd, graph) == v0) return hd;
+            }
+
+            if (auto hd10 = halfedge(v0, graph); source(hd10, graph) == v0) {
+                // v0 is a zero-degree vertex
+                auto hd01 = opposite(hd10, graph);
+                set_target(hd01, v1, graph);
+                insert_halfedge_loop(v1, hd01);
+                return hd01;
+            } else if (auto hd01 = halfedge(v1, graph); source(hd01, graph) == v1) {
+                // v1 is a zero-degree vertex
+                auto hd10 = opposite(hd01, graph);
+                set_target(hd10, v0, graph);
+                insert_halfedge_loop(v0, hd10);
+                return hd01;
+            }
 
             auto ed = CGAL::add_edge(graph);
-            auto hd = halfedge(ed, graph), ohd = opposite(hd);
-            set_target(hd, v1);
-            set_target(ohd, v0);
+            auto hd01 = halfedge(ed, graph), hd10 = opposite(hd01, graph);
+            set_target(hd01, v1, graph);
+            set_target(hd10, v0, graph);
+            insert_halfedge_loop(v0, hd10);
+            insert_halfedge_loop(v1, hd01);
+            return hd01;
 
-            return hd;
+            // if (vs == v0) {
+            //     // hd is a loop halfedge; v0 is a zero-degree vertex
+            //     set_target(opposite(hd, graph), v1, graph);
+            //     return hd;
+            // } else
+            //     // Add a new edge connecting v0 and v1
+            //     // hd points from v1 to v0
+            //     halfedge_descriptor hd;
+            // if (auto ohd = halfedge(v1, graph); source(ohd, graph) == v1) {
+            //     // If v1 is a zero-degree vertex, connect its loop halfedge to v0
+            //     hd = opposite(ohd, graph);
+            //     set_target(hd, v0, graph);
+            // } else {
+            //     auto ed = CGAL::add_edge(graph);
+            //     hd = halfedge(ed, graph);
+            //     set_target(hd, v0, graph);
+            //     set_target(opposite(hd, graph), v1, graph);
+            // }
+
+            // // Add the new edge to the halfedge loop around v0
+            // halfaroundtar
+            // return hd;
         }
 
         // halfedge_descriptor add_loop(vertex_descriptor v) {
@@ -386,7 +442,7 @@ class SSM_restricted_voronoi_diagram {
 
         // halfedge_descriptor add_loop(const Point_3 &p) { return add_loop(add_vertex(p)); }
 
-        void set_target(halfedge_descriptor hd, vertex_descriptor v) { CGAL::set_target(hd, v, graph); }
+        // void set_target(halfedge_descriptor hd, vertex_descriptor v) { CGAL::set_target(hd, v, graph); }
 
         // void set_next(halfedge_descriptor hd, halfedge_descriptor next) { CGAL::set_next(hd, next, graph); }
 
