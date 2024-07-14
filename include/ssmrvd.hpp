@@ -518,10 +518,12 @@ class SSM_restricted_voronoi_diagram {
             for (auto hd : halfedges(graph)) {
                 if (face(hd, graph) != fd0) continue;
                 auto fd = add_face(graph);
+                set_halfedge(fd, hd, graph);
                 for (auto hd_inner : halfedges_around_face(hd, graph)) {
                     set_face(hd_inner, fd, graph);
                 }
             }
+            remove_face(fd0, graph);
         }
 
         // halfedge_descriptor add_loop(vertex_descriptor v) {
@@ -729,7 +731,7 @@ class SSM_restricted_voronoi_diagram {
             stat = step();
         } while (stat);
         vd.trace_faces();
-        CGAL_postcondition(is_valid_halfedge_graph(vd.graph, true));
+        CGAL_postcondition(is_valid_face_graph(vd.graph, true));
     }
 
     //    private:
