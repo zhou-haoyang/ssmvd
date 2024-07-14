@@ -421,7 +421,7 @@ class SSM_restricted_voronoi_diagram {
                     hd_cur = hd_next;
                     ori_cur = ori_next;
                 } while (hd_cur != halfedge(vt, graph));
-                // CGAL_assertion(found);
+                CGAL_assertion(found);
             }
             // auto [hd_it, hd_it_end] = halfedges_around_target(vt, graph);
             // CGAL_assertion(hd_it != hd_it_end);
@@ -656,13 +656,22 @@ class SSM_restricted_voronoi_diagram {
 
                 if (dist_min < INF) {
                     // A 2-site bisector intersects the boundary segment
+                    auto edge_hd = opposite(bh, mesh);
+                    Boundary_vertex_id bvid(cone_index(k0), cone_index(k1_min),
+                                            get(edge_index_map, edge(edge_hd, mesh)));
                     auto bisect_dir = cross_product(bi_plane_min.orthogonal_vector(), b_plane.orthogonal_vector());
                     auto orient = orientation(b_plane.orthogonal_vector(), bisect_dir, b_line.d);
                     auto pt_start = b_segment(tb_min);
                     auto bisect_line = Pline_3::ray(pt_start, orient == POSITIVE ? bisect_dir : -bisect_dir);
-                    auto v_vd = vd.add_vertex(pt_start, Boundary_bisector_info{bh, k0, k1_min});
+
+                    typename Voronoi_diagram::vertex_descriptor v_vd;
+                    if (auto vd_it = b_vert_map.find(bvid); vd_it != b_vert_map.cend()) {
+                        v_vd = vd_it->second;
+                    } else {
+                        v_vd = vd.add_vertex(pt_start, Boundary_bisector_info{bh, k0, k1_min});
+                        b_vert_map[bvid] = v_vd;
+                    }
                     // auto v_hd = vd.add_loop(v_vd);
-                    auto edge_hd = opposite(bh, mesh);
                     i_traces.push_back({
                         bisect_line,
                         bi_plane_min,
@@ -674,9 +683,6 @@ class SSM_restricted_voronoi_diagram {
                         {},
                         v_vd,
                     });
-                    Boundary_vertex_id bvid(cone_index(k0), cone_index(k1_min),
-                                            get(edge_index_map, edge(edge_hd, mesh)));
-                    b_vert_map[bvid] = v_vd;
                     // auto bi_dir = cross_product(bi_plane_min.orthogonal_vector(), b_plane.orthogonal_vector());
                     // auto ori = orientation(b_plane.orthogonal_vector(), bi_dir, b_line.d);
                     // auto bisect = Pline_3::ray(b_segment(tb_min), ori == POSITIVE ? bi_dir : -bi_dir);
