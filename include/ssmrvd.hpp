@@ -365,24 +365,12 @@ class SSM_restricted_voronoi_diagram {
               vertex_normal_map(get(Vertex_normal_property{}, graph)) {
             fd0 = add_face(graph);
         }
-        // halfedge_descriptor opposite(halfedge_descriptor hd) const { return CGAL::opposite(hd, graph); }
 
         vertex_descriptor add_vertex(const Point_3 &p, const Vertex_info &info, const Vector_3 &n = {}) {
             auto vd = CGAL::add_vertex(graph);
             put(vpm, vd, p);
             put(vertex_info_map, vd, info);
             put(vertex_normal_map, vd, n);
-
-            // // Create a loop halfedge around the vertex to fulfill the HE data structure
-            // auto ed = CGAL::add_edge(graph);
-            // auto hd = halfedge(ed, graph), ohd = opposite(hd, graph);
-            // set_target(hd, vd, graph);
-            // set_target(ohd, vd, graph);
-
-            // set_halfedge(vd, hd, graph);
-
-            // set_next(hd, ohd, graph);
-            // set_next(ohd, hd, graph);
             return vd;
         }
 
@@ -395,15 +383,13 @@ class SSM_restricted_voronoi_diagram {
         }
 
         void insert_halfedge_loop(halfedge_descriptor hd) {
-            // TODO
             auto vt = target(hd, graph), vs = source(hd, graph);
             auto hd_cur = halfedge(vt, graph);
             if (hd_cur == graph_traits::null_halfedge()) {
                 set_halfedge(vt, hd, graph);
-                // print_halfedge_loop(vt);
                 return;
             }
-            // print_halfedge_loop(vt);
+
             auto pt = get(vpm, vt), ps = get(vpm, vs);
             auto v = ps - pt;
             auto n = get(vertex_normal_map, vt);
@@ -423,33 +409,9 @@ class SSM_restricted_voronoi_diagram {
                 } while (hd_cur != halfedge(vt, graph));
                 CGAL_assertion(found);
             }
-            // auto [hd_it, hd_it_end] = halfedges_around_target(vt, graph);
-            // CGAL_assertion(hd_it != hd_it_end);
-            // auto hd0 = *hd_it++;
-            // // halfedge_descriptor hd_insert = hd0;
-            // if (hd_it != hd_it_end) {
-            //     auto ori_prev = orientation(n, v, get(vpm, source(hd0, graph)) - pt);
-            //     for (; hd_it != hd_it_end; ++hd_it) {
-            //         auto ori = orientation(n, v, get(vpm, source(*hd_it, graph)) - pt);
-            //         if (ori_prev == NEGATIVE && ori == POSITIVE) {
-            //             break;
-            //         }
-            //         hd0 = *hd_it;
-            //         ori_prev = ori;
-            //     }
-            // }
-            // halfedge_descriptor hd_insert;
-            // for (auto &hd : halfedges_around_target(vt, graph)) {
-            //     auto
-            //     if (source(h, graph) == vs) {
-            //         hd_insert = h;
-            //         break;
-            //     }
-            // }
+
             set_next(hd, next(hd_cur, graph), graph);
             set_next(hd_cur, opposite(hd, graph), graph);
-
-            // print_halfedge_loop(vt);
         }
 
         halfedge_descriptor connect(vertex_descriptor v0, vertex_descriptor v1, face_descriptor fd01 = {},
@@ -460,22 +422,6 @@ class SSM_restricted_voronoi_diagram {
                 }
             }
 
-            // for (auto hd : halfedges_around_target(v0, graph)) {
-            //     if (source(hd, graph) == v1) return opposite(hd, graph);
-            // }
-
-            // halfedge_descriptor hd10, hd01;
-            // if (hd10 = halfedge(v0, graph); source(hd10, graph) == v0) {
-            //     // v0 is a zero-degree vertex
-            //     hd01 = opposite(hd10, graph);
-            //     set_target(hd01, v1, graph);
-            //     insert_halfedge_loop(hd01);
-            // } else if (hd01 = halfedge(v1, graph); source(hd01, graph) == v1) {
-            //     // v1 is a zero-degree vertex
-            //     hd10 = opposite(hd01, graph);
-            //     set_target(hd10, v0, graph);
-            //     insert_halfedge_loop(hd10);
-            // } else {
             auto ed = CGAL::add_edge(graph);
             auto hd01 = halfedge(ed, graph);
             auto hd10 = opposite(hd01, graph);
@@ -485,33 +431,10 @@ class SSM_restricted_voronoi_diagram {
             set_next(hd10, hd01, graph);
             insert_halfedge_loop(hd10);
             insert_halfedge_loop(hd01);
-            // }
+
             set_face(hd01, fd01, graph);
             set_face(hd10, fd10, graph);
             return hd01;
-
-            // if (vs == v0) {
-            //     // hd is a loop halfedge; v0 is a zero-degree vertex
-            //     set_target(opposite(hd, graph), v1, graph);
-            //     return hd;
-            // } else
-            //     // Add a new edge connecting v0 and v1
-            //     // hd points from v1 to v0
-            //     halfedge_descriptor hd;
-            // if (auto ohd = halfedge(v1, graph); source(ohd, graph) == v1) {
-            //     // If v1 is a zero-degree vertex, connect its loop halfedge to v0
-            //     hd = opposite(ohd, graph);
-            //     set_target(hd, v0, graph);
-            // } else {
-            //     auto ed = CGAL::add_edge(graph);
-            //     hd = halfedge(ed, graph);
-            //     set_target(hd, v0, graph);
-            //     set_target(opposite(hd, graph), v1, graph);
-            // }
-
-            // // Add the new edge to the halfedge loop around v0
-            // halfaroundtar
-            // return hd;
         }
 
         void trace_faces() {
@@ -525,25 +448,6 @@ class SSM_restricted_voronoi_diagram {
             }
             remove_face(fd0, graph);
         }
-
-        // halfedge_descriptor add_loop(vertex_descriptor v) {
-        //     auto ed = CGAL::add_edge(graph);
-        //     auto hd = halfedge(ed, graph), ohd = opposite(hd);
-        //     set_target(hd, v);
-        //     set_target(ohd, v);
-        //     return ohd;
-        // }
-
-        // halfedge_descriptor add_loop(const Point_3 &p) { return add_loop(add_vertex(p)); }
-
-        // void set_target(halfedge_descriptor hd, vertex_descriptor v) { CGAL::set_target(hd, v, graph); }
-
-        // void set_next(halfedge_descriptor hd, halfedge_descriptor next) { CGAL::set_next(hd, next, graph); }
-
-        // void set_next_double_sided(halfedge_descriptor hd, halfedge_descriptor next) {
-        //     set_next(hd, next);
-        //     set_next(opposite(hd), opposite(next));
-        // }
     };
 
     struct InternalTrace {
