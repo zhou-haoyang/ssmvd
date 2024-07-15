@@ -23,6 +23,7 @@
 #include <CGAL/boost/graph/iterator.h>
 #include <CGAL/convex_hull_3.h>
 
+#include <format>
 #include <ssmrvd.hpp>
 
 #include <Eigen/Dense>
@@ -41,6 +42,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <unordered_map>
+#include <vector>
 
 typedef CGAL::Simple_cartesian<double> Kernel;
 typedef Kernel::FT FT;
@@ -170,7 +172,7 @@ class GVDApp : public App {
     Eigen::MatrixX<uint8_t> tex_r, tex_g, tex_b, tex_a;
     Eigen::MatrixX3<uint8_t> site_colors;
 
-    int mesh_view, vd_view, site_view, trace_view;
+    int mesh_view, vd_view, site_view, trace_view, edge_labels_view, vertex_edge_labels_view;
 
     bool load_mesh(const std::string &filename) {
         Eigen::MatrixXd V, TC, N;   // #V by 3, #TC by 2, #N by 3
@@ -248,6 +250,7 @@ class GVDApp : public App {
         igl::stb::read_image("texture.png", tex_r, tex_g, tex_b, tex_a);
         view.set_texture(tex_r, tex_g, tex_b, tex_a);
         view.show_texture = true;
+        view.double_sided = true;
 
         // gvd.reload();
         return true;
@@ -452,6 +455,8 @@ class GVDApp : public App {
         vd_view = add_view("VD");
         site_view = add_view("Sites");
         trace_view = add_view("Traces");
+        edge_labels_view = add_view("Edge Labels");
+        vertex_edge_labels_view = add_view("Vertex Edge Labels");
 
         Eigen::MatrixX3d metrics_3d(4, 3);
         metrics_3d << -1, -1, -1, 1, 1, -1, 1, -1, 1, -1, 1, 1;
@@ -575,12 +580,27 @@ class GVDApp : public App {
             i++;
         }
 
+        std::vector<std::string> edge_labels;
+        Eigen::MatrixX3d VE(vd.number_of_edges(), 3);
         Eigen::MatrixX2i E(vd.number_of_edges(), 2);
         i = 0;
         for (auto e : vd.edges()) {
-            auto he = vd.halfedge(e);
-            E.row(i) << v_map[vd.source(he)], v_map[vd.target(he)];
+            auto he = vd.halfedge(e), ohe = vd.opposite(he);
+            auto ei = v_map[vd.source(he)], ej = v_map[vd.target(he)];
+            E.row(i) << ei, ej;
+            VE.row(i) = (V.row(ei) + V.row(ej)) / 2;
+            // edge_labels.push_back(std::format("{} {}", he.id(), ohe.id()));
+            edge_labels.push_back(std::format("{} {}", vd.face(he).id(), vd.face(ohe).id()));
             i++;
+        }
+
+        std::vector<std::string> edge_vertex_labels;
+        for (auto v : vd.vertices()) {
+            std::string l;
+            for (auto hd : vd.halfedges_around_target(vd.halfedge(v))) {
+                l += std::format("{} ", hd.id());
+            }
+            edge_vertex_labels.push_back(l);
         }
 
         auto &view = viewer.data(vd_view);
@@ -590,8 +610,21 @@ class GVDApp : public App {
         view.line_width = 4;
         auto VL = V.rowwise() + Eigen::RowVector3d(0, 0, 0.01);
         view.set_labels(VL, labels);
-        view.show_custom_labels = true;
+        // view.show_custom_labels = true;
         view.label_size = 2;
+
+        auto &edge_view = viewer.data(edge_labels_view);
+        auto VEL = VE.rowwise() + Eigen::RowVector3d(0, 0, 0.01);
+        edge_view.set_labels(VE, edge_labels);
+        edge_view.show_custom_labels = true;
+        edge_view.label_size = 2;
+        edge_view.label_color = Eigen::Vector4f(0, 1., 0, 1);
+
+        auto &vertex_edge_view = viewer.data(vertex_edge_labels_view);
+        vertex_edge_view.set_labels(V, edge_vertex_labels);
+        vertex_edge_view.show_custom_labels = true;
+        vertex_edge_view.label_size = 2;
+        vertex_edge_view.label_color = Eigen::Vector4f(0, 0, 1., 1);
     }
 
     void update_trace() {
@@ -602,7 +635,7 @@ class GVDApp : public App {
             auto &tr = gvd.i_traces[i];
             auto l = tr.bisect_line;
             l.t_min = std::max(l.t_min, 0.);
-            l.t_max = std::min(l.t_max, 0.2);
+            l.t_max = std::min(l.t_max, 0.5);
             V.row(i * 2) << l.p_min().x(), l.p_min().y(), l.p_min().z();
             V.row(i * 2 + 1) << l.p_max().x(), l.p_max().y(), l.p_max().z();
             E.row(i) << i * 2, i * 2 + 1;
