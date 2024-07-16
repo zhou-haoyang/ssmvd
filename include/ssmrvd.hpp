@@ -502,7 +502,7 @@ class SSM_restricted_voronoi_diagram {
 
     void clear_metrics() { metrics.clear(); }
 
-    Cone_descriptor trace_boundary(mesh_halfedge_descriptor bh, Cone_descriptor k0) {
+    Cone_descriptor trace_boundary(mesh_halfedge_descriptor bh, Cone_descriptor k0, bool double_sided = true) {
         // Cone_descriptor k0;
         // auto [bhit, bhit_end] = halfedges_around_face(bhd, mesh);
         bool init = true;
@@ -513,9 +513,12 @@ class SSM_restricted_voronoi_diagram {
         //     init = false;
         // }
         auto b_line = Pline_3::segment(get(vpm, source(bh, mesh)), get(vpm, target(bh, mesh)));
-        vd.add_vertex(b_line.p_min(), Boundary_vertex_info{bh, k0});
+        // vd.add_vertex(b_line.p_min(), Boundary_vertex_info{bh, k0});
 
-        auto b_plane = mesh_face_plane(opposite(bh, mesh));
+        auto b_plane = mesh_face_plane(bh);
+        auto bh_opposite = opposite(bh, mesh);
+        auto b_plane_opposite =
+            bh_opposite != mesh_graph_traits::null_halfedge() ? mesh_face_plane(bh_opposite) : Plane_3{};
         Cone_descriptor k_prev;
 
         // Find all boundary-cone / boundary-bisector intersections
@@ -560,13 +563,9 @@ class SSM_restricted_voronoi_diagram {
 
             if (dist_min < INF) {
                 // A 2-site bisector intersects the boundary segment
-                auto edge_hd = opposite(bh, mesh);
-                Boundary_vertex_id bvid(cone_index(k0), cone_index(k1_min), get(edge_index_map, edge(edge_hd, mesh)));
-                auto bisect_dir = cross_product(bi_plane_min.orthogonal_vector(), b_plane.orthogonal_vector());
-                auto orient = orientation(b_plane.orthogonal_vector(), bisect_dir, b_line.d);
+                // auto edge_hd = opposite(bh, mesh);
+                Boundary_vertex_id bvid(cone_index(k0), cone_index(k1_min), get(edge_index_map, edge(bh, mesh)));
                 auto pt_start = b_segment(tb_min);
-                auto bisect_line = Pline_3::ray(pt_start, orient == POSITIVE ? bisect_dir : -bisect_dir);
-
                 typename Voronoi_diagram::vertex_descriptor v_vd;
                 if (auto vd_it = b_vert_map.find(bvid); vd_it != b_vert_map.cend()) {
                     v_vd = vd_it->second;
@@ -574,18 +573,41 @@ class SSM_restricted_voronoi_diagram {
                     v_vd = vd.add_vertex(pt_start, Boundary_bisector_info{bh, k0, k1_min});
                     b_vert_map[bvid] = v_vd;
                 }
+
+                auto bisect_dir = cross_product(bi_plane_min.orthogonal_vector(), b_plane.orthogonal_vector());
+                auto orient = orientation(b_plane.orthogonal_vector(), b_line.d, bisect_dir);
+                auto bisect_line = Pline_3::ray(pt_start, orient == POSITIVE ? bisect_dir : -bisect_dir);
+
                 // auto v_hd = vd.add_loop(v_vd);
                 i_traces.push_back({
                     bisect_line,
                     bi_plane_min,
                     b_plane,
-                    edge_hd,
-                    edge_hd,
+                    bh,
+                    bh,
                     k0,
                     k1_min,
                     {},
                     v_vd,
                 });
+
+                if (double_sided && bh_opposite != mesh_graph_traits::null_halfedge()) {
+                    auto bisect_dir =
+                        cross_product(bi_plane_min.orthogonal_vector(), b_plane_opposite.orthogonal_vector());
+                    auto orient = orientation(b_plane_opposite.orthogonal_vector(), -b_line.d, bisect_dir);
+                    auto bisect_line = Pline_3::ray(pt_start, orient == POSITIVE ? bisect_dir : -bisect_dir);
+                    i_traces.push_back({
+                        bisect_line,
+                        bi_plane_min,
+                        b_plane_opposite,
+                        bh_opposite,
+                        bh_opposite,
+                        k0,
+                        k1_min,
+                        {},
+                        v_vd,
+                    });
+                }
                 // auto bi_dir = cross_product(bi_plane_min.orthogonal_vector(), b_plane.orthogonal_vector());
                 // auto ori = orientation(b_plane.orthogonal_vector(), bi_dir, b_line.d);
                 // auto bisect = Pline_3::ray(b_segment(tb_min), ori == POSITIVE ? bi_dir : -bi_dir);
@@ -598,13 +620,42 @@ class SSM_restricted_voronoi_diagram {
                 if (!h_max) break;
 
                 // Otherwise switch to the next cone
-                vd.add_vertex(b_segment.p_max(), Boundary_cone_info{bh, k0});
+                // vd.add_vertex(b_segment.p_max(), Boundary_cone_info{bh, k0});
                 k_prev = k0;
                 auto [c0, m0] = site(k0.site_idx);
                 k0.face = face(opposite(*h_max, m0.graph), m0.graph);
             }
         }
         return k0;
+    }
+
+    void trace_all_boundaries(mesh_vertex_descriptor vd) {
+        Cone_descriptor k0;
+        find_nearest_site(get(vpm, vd), k0);
+
+        std::vector<std::pair<mesh_halfedge_descriptor, Cone_descriptor>> queue;
+        for (auto hd : halfedges_around_source(vd, mesh)) {
+            queue.emplace_back(hd, k0);
+        }
+        using edge_bool_t = CGAL::dynamic_edge_property_t<bool>;
+        using edge_visited_map = typename boost::property_map<SurfaceMesh, edge_bool_t>::type;
+
+        auto edge_visited = get(edge_bool_t{}, mesh);
+        while (!queue.empty()) {
+            auto [hd, k0] = queue.back();
+            queue.pop_back();
+            if (get(edge_visited, edge(hd, mesh))) continue;
+            auto k = trace_boundary(hd, k0);
+            put(edge_visited, edge(hd, mesh), true);
+            for (auto hd_inner : halfedges_around_source(target(hd, mesh), mesh)) {
+                queue.emplace_back(hd_inner, k);
+            }
+        }
+    }
+
+    void trace_all_boundaries() {
+        if (is_empty(mesh)) return;
+        trace_all_boundaries(*vertices(mesh).first);
     }
 
     void reload() { vpm = get(vertex_point, mesh); }
@@ -627,6 +678,7 @@ class SSM_restricted_voronoi_diagram {
     }
 
     void build() {
+        trace_all_boundaries();
         bool stat;
         do {
             stat = step();
