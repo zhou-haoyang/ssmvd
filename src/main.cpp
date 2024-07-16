@@ -647,19 +647,20 @@ class GVDApp : public App {
     }
 
     auto trace_boundary() {
+        gvd.trace_all_boundaries();
         // SM_halfedge_descriptor hd;
-        if (seam_hd.is_valid()) {
-            halfedge_descriptor shd = seam_hd;
-            auto seam_edge_map = sm.property_map<SM_edge_descriptor, bool>("e:on_seam").first;
-            auto seam_vertex_map = sm.property_map<SM_vertex_descriptor, bool>("v:on_seam").first;
-            Seam_mesh seam_mesh(sm, seam_edge_map, seam_vertex_map);
-            auto [begin, end] = CGAL::halfedges_around_face(CGAL::opposite(shd, seam_mesh), seam_mesh);
-            gvd.trace_boundary(begin, end);
-        } else if (CGAL::is_closed(sm)) {
-            auto hd = CGAL::Polygon_mesh_processing::longest_border(sm).first;
-            auto [begin, end] = sm.halfedges_around_face(hd);
-            gvd.trace_boundary(begin, end);
-        }
+        // if (seam_hd.is_valid()) {
+        //     halfedge_descriptor shd = seam_hd;
+        //     auto seam_edge_map = sm.property_map<SM_edge_descriptor, bool>("e:on_seam").first;
+        //     auto seam_vertex_map = sm.property_map<SM_vertex_descriptor, bool>("v:on_seam").first;
+        //     Seam_mesh seam_mesh(sm, seam_edge_map, seam_vertex_map);
+        //     auto [begin, end] = CGAL::halfedges_around_face(CGAL::opposite(shd, seam_mesh), seam_mesh);
+        //     gvd.trace_boundary(begin, end);
+        // } else if (CGAL::is_closed(sm)) {
+        //     auto hd = CGAL::Polygon_mesh_processing::longest_border(sm).first;
+        //     auto [begin, end] = sm.halfedges_around_face(hd);
+        //     gvd.trace_boundary(begin, end);
+        // }
         // if (!hd.is_valid()) {
         //     return;
         // }

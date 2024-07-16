@@ -502,112 +502,160 @@ class SSM_restricted_voronoi_diagram {
 
     void clear_metrics() { metrics.clear(); }
 
-    template <class MeshHalfedgeIter>
-    void trace_boundary(MeshHalfedgeIter h_begin, MeshHalfedgeIter h_end) {
-        Cone_descriptor k0;
+    Cone_descriptor trace_boundary(mesh_halfedge_descriptor bh, Cone_descriptor k0, bool double_sided = true) {
+        // Cone_descriptor k0;
         // auto [bhit, bhit_end] = halfedges_around_face(bhd, mesh);
         bool init = true;
         // Loop over boundary halfedges
-        for (MeshHalfedgeIter h_it = h_begin; h_it != h_end; ++h_it) {
-            auto bh = *h_it;
-            if (init) {
-                find_nearest_site(get(vpm, source(bh, mesh)), k0);
-                init = false;
-            }
-            auto b_line = Pline_3::segment(get(vpm, source(bh, mesh)), get(vpm, target(bh, mesh)));
-            vd.add_vertex(b_line.p_min(), Boundary_vertex_info{bh, k0});
+        // auto bh = *h_it;
+        // if (init) {
+        //     find_nearest_site(get(vpm, source(bh, mesh)), k0);
+        //     init = false;
+        // }
+        auto b_line = Pline_3::segment(get(vpm, source(bh, mesh)), get(vpm, target(bh, mesh)));
+        // vd.add_vertex(b_line.p_min(), Boundary_vertex_info{bh, k0});
 
-            auto b_plane = mesh_face_plane(opposite(bh, mesh));
-            Cone_descriptor k_prev;
+        auto b_plane = mesh_face_plane(bh);
+        auto bh_opposite = opposite(bh, mesh);
+        auto b_plane_opposite =
+            bh_opposite != mesh_graph_traits::null_halfedge() ? mesh_face_plane(bh_opposite) : Plane_3{};
+        Cone_descriptor k_prev;
 
-            // Find all boundary-cone / boundary-bisector intersections
-            for (;;) {
-                Pline_3 b_segment;
-                metric_halfedge_descriptor_opt h_min, h_max;
-                auto res = isect(k0, b_line, b_segment, h_min, h_max);
-                CGAL_assertion_msg(res, "Boundary must intersect the cone");
+        // Find all boundary-cone / boundary-bisector intersections
+        for (;;) {
+            Pline_3 b_segment;
+            metric_halfedge_descriptor_opt h_min, h_max;
+            auto res = isect(k0, b_line, b_segment, h_min, h_max);
+            CGAL_assertion_msg(res, "Boundary must intersect the cone");
 
-                // Find nearest intersection of 2-site bisector plane with the boundary segment
-                T dist_min = INF;
-                T tb_min;
-                Plane_3 bi_plane_min;
-                Cone_descriptor k1_min;
-                for (index_t site_idx = 0; site_idx < sites.size(); ++site_idx) {
-                    if (site_idx == k0.site_idx) {
-                        continue;
-                    }
-
-                    auto [c, m] = site(site_idx);
-                    for (auto &fd : faces(m.graph)) {
-                        Cone_descriptor k1{site_idx, fd};
-                        if (k1 == k_prev) continue;
-
-                        Pline_3 b_overlap;
-                        if (!isect(k1, b_segment, b_overlap)) continue;
-                        Plane_3 bi_plane = get_bisect_plane(k0, k1);
-                        if (bi_plane.is_degenerate()) continue;
-
-                        T tb;
-                        if (!CGAL::isect(b_overlap, bi_plane, tb)) continue;
-                        T dist = tb - b_segment.t_min;
-                        CGAL_assertion_msg(dist >= 0, "Intersection must be on the segment");
-                        if (dist < dist_min) {
-                            dist_min = dist;
-                            tb_min = tb;
-                            bi_plane_min = bi_plane;
-                            k1_min = k1;
-                        }
-                    }
+            // Find nearest intersection of 2-site bisector plane with the boundary segment
+            T dist_min = INF;
+            T tb_min;
+            Plane_3 bi_plane_min;
+            Cone_descriptor k1_min;
+            for (index_t site_idx = 0; site_idx < sites.size(); ++site_idx) {
+                if (site_idx == k0.site_idx) {
+                    continue;
                 }
 
-                if (dist_min < INF) {
-                    // A 2-site bisector intersects the boundary segment
-                    auto edge_hd = opposite(bh, mesh);
-                    Boundary_vertex_id bvid(cone_index(k0), cone_index(k1_min),
-                                            get(edge_index_map, edge(edge_hd, mesh)));
-                    auto bisect_dir = cross_product(bi_plane_min.orthogonal_vector(), b_plane.orthogonal_vector());
-                    auto orient = orientation(b_plane.orthogonal_vector(), bisect_dir, b_line.d);
-                    auto pt_start = b_segment(tb_min);
-                    auto bisect_line = Pline_3::ray(pt_start, orient == POSITIVE ? bisect_dir : -bisect_dir);
+                auto [c, m] = site(site_idx);
+                for (auto &fd : faces(m.graph)) {
+                    Cone_descriptor k1{site_idx, fd};
+                    if (k1 == k_prev) continue;
 
-                    typename Voronoi_diagram::vertex_descriptor v_vd;
-                    if (auto vd_it = b_vert_map.find(bvid); vd_it != b_vert_map.cend()) {
-                        v_vd = vd_it->second;
-                    } else {
-                        v_vd = vd.add_vertex(pt_start, Boundary_bisector_info{bh, k0, k1_min});
-                        b_vert_map[bvid] = v_vd;
+                    Pline_3 b_overlap;
+                    if (!isect(k1, b_segment, b_overlap)) continue;
+                    Plane_3 bi_plane = get_bisect_plane(k0, k1);
+                    if (bi_plane.is_degenerate()) continue;
+
+                    T tb;
+                    if (!CGAL::isect(b_overlap, bi_plane, tb)) continue;
+                    T dist = tb - b_segment.t_min;
+                    CGAL_assertion_msg(dist >= 0, "Intersection must be on the segment");
+                    if (dist < dist_min) {
+                        dist_min = dist;
+                        tb_min = tb;
+                        bi_plane_min = bi_plane;
+                        k1_min = k1;
                     }
-                    // auto v_hd = vd.add_loop(v_vd);
+                }
+            }
+
+            if (dist_min < INF) {
+                // A 2-site bisector intersects the boundary segment
+                // auto edge_hd = opposite(bh, mesh);
+                Boundary_vertex_id bvid(cone_index(k0), cone_index(k1_min), get(edge_index_map, edge(bh, mesh)));
+                auto pt_start = b_segment(tb_min);
+                typename Voronoi_diagram::vertex_descriptor v_vd;
+                if (auto vd_it = b_vert_map.find(bvid); vd_it != b_vert_map.cend()) {
+                    v_vd = vd_it->second;
+                } else {
+                    v_vd = vd.add_vertex(pt_start, Boundary_bisector_info{bh, k0, k1_min});
+                    b_vert_map[bvid] = v_vd;
+                }
+
+                auto bisect_dir = cross_product(bi_plane_min.orthogonal_vector(), b_plane.orthogonal_vector());
+                auto orient = orientation(b_plane.orthogonal_vector(), b_line.d, bisect_dir);
+                auto bisect_line = Pline_3::ray(pt_start, orient == POSITIVE ? bisect_dir : -bisect_dir);
+
+                // auto v_hd = vd.add_loop(v_vd);
+                i_traces.push_back({
+                    bisect_line,
+                    bi_plane_min,
+                    b_plane,
+                    bh,
+                    bh,
+                    k0,
+                    k1_min,
+                    {},
+                    v_vd,
+                });
+
+                if (double_sided && bh_opposite != mesh_graph_traits::null_halfedge()) {
+                    auto bisect_dir =
+                        cross_product(bi_plane_min.orthogonal_vector(), b_plane_opposite.orthogonal_vector());
+                    auto orient = orientation(b_plane_opposite.orthogonal_vector(), -b_line.d, bisect_dir);
+                    auto bisect_line = Pline_3::ray(pt_start, orient == POSITIVE ? bisect_dir : -bisect_dir);
                     i_traces.push_back({
                         bisect_line,
                         bi_plane_min,
-                        b_plane,
-                        edge_hd,
-                        edge_hd,
+                        b_plane_opposite,
+                        bh_opposite,
+                        bh_opposite,
                         k0,
                         k1_min,
                         {},
                         v_vd,
                     });
-                    // auto bi_dir = cross_product(bi_plane_min.orthogonal_vector(), b_plane.orthogonal_vector());
-                    // auto ori = orientation(b_plane.orthogonal_vector(), bi_dir, b_line.d);
-                    // auto bisect = Pline_3::ray(b_segment(tb_min), ori == POSITIVE ? bi_dir : -bi_dir);
-
-                    b_line.t_min = tb_min;
-                    k_prev = k0;
-                    k0 = k1_min;
-                } else {
-                    // The bondary segment does not intersect leave the cone. Switch to the next boundary segment
-                    if (!h_max) break;
-
-                    // Otherwise switch to the next cone
-                    vd.add_vertex(b_segment.p_max(), Boundary_cone_info{bh, k0});
-                    k_prev = k0;
-                    auto [c0, m0] = site(k0.site_idx);
-                    k0.face = face(opposite(*h_max, m0.graph), m0.graph);
                 }
+                // auto bi_dir = cross_product(bi_plane_min.orthogonal_vector(), b_plane.orthogonal_vector());
+                // auto ori = orientation(b_plane.orthogonal_vector(), bi_dir, b_line.d);
+                // auto bisect = Pline_3::ray(b_segment(tb_min), ori == POSITIVE ? bi_dir : -bi_dir);
+
+                b_line.t_min = tb_min;
+                k_prev = k0;
+                k0 = k1_min;
+            } else {
+                // The bondary segment does not intersect leave the cone. Switch to the next boundary segment
+                if (!h_max) break;
+
+                // Otherwise switch to the next cone
+                // vd.add_vertex(b_segment.p_max(), Boundary_cone_info{bh, k0});
+                k_prev = k0;
+                auto [c0, m0] = site(k0.site_idx);
+                k0.face = face(opposite(*h_max, m0.graph), m0.graph);
             }
         }
+        return k0;
+    }
+
+    void trace_all_boundaries(mesh_vertex_descriptor vd) {
+        Cone_descriptor k0;
+        find_nearest_site(get(vpm, vd), k0);
+
+        std::vector<std::pair<mesh_halfedge_descriptor, Cone_descriptor>> queue;
+        for (auto hd : halfedges_around_source(vd, mesh)) {
+            queue.emplace_back(hd, k0);
+        }
+        using edge_bool_t = CGAL::dynamic_edge_property_t<bool>;
+        using edge_visited_map = typename boost::property_map<SurfaceMesh, edge_bool_t>::type;
+
+        auto edge_visited = get(edge_bool_t{}, mesh);
+        while (!queue.empty()) {
+            auto [hd, k0] = queue.back();
+            queue.pop_back();
+            if (get(edge_visited, edge(hd, mesh))) continue;
+            auto k = trace_boundary(hd, k0);
+            put(edge_visited, edge(hd, mesh), true);
+            for (auto hd_inner : halfedges_around_source(target(hd, mesh), mesh)) {
+                queue.emplace_back(hd_inner, k);
+            }
+        }
+    }
+
+    void trace_all_boundaries() {
+        if (is_empty(mesh)) return;
+        trace_all_boundaries(*vertices(mesh).first);
     }
 
     void reload() { vpm = get(vertex_point, mesh); }
@@ -630,6 +678,7 @@ class SSM_restricted_voronoi_diagram {
     }
 
     void build() {
+        trace_all_boundaries();
         bool stat;
         do {
             stat = step();
