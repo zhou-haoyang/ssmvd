@@ -24,6 +24,7 @@
 #include <CGAL/convex_hull_3.h>
 
 #include <format>
+#include <istream>
 #include <ssmrvd.hpp>
 
 #include <Eigen/Dense>
@@ -261,6 +262,92 @@ class GVDApp : public App {
         return std::make_tuple(sm.source(h), sm.target(h), sm.target(sm.next(h)));
     }
 
+    template <class HDS>
+    class Polyhedron_reader : public CGAL::Modifier_base<HDS> {
+       protected:
+        std::istream &is;
+
+       public:
+        Polyhedron_reader(std::istream &is) : is(is) {}
+        void operator()(HDS &hds) {
+            // Postcondition: hds is a valid polyhedral surface.
+            CGAL::Polyhedron_incremental_builder_3<HDS> B(hds, true);
+            size_t V, F;
+            is >> V >> F;
+            B.begin_surface(V, F);
+            typedef typename HDS::Vertex Vertex;
+            typedef typename Vertex::Point Point;
+            for (size_t i = 0; i < V; ++i) {
+                double x, y, z;
+                is >> x >> y >> z;
+                B.add_vertex(Point(x, y, z));
+            }
+
+            for (size_t i = 0; i < F; ++i) {
+                size_t n;
+                is >> n;
+                B.begin_facet();
+                for (size_t j = 0; j < n; ++j) {
+                    size_t k;
+                    is >> k;
+                    B.add_vertex_to_facet(k);
+                }
+                B.end_facet();
+            }
+
+            B.end_surface();
+        }
+    };
+
+    void update_sites() {
+        size_t n_sites = gvd.sites.size();
+        Eigen::MatrixX3d site_pos(n_sites, 3);
+        for (Index i = 0; i < n_sites; ++i) {
+            auto [p, idx] = gvd.sites[i];
+            site_pos.row(i) << p.x(), p.y(), p.z();
+        }
+
+        auto &view = viewer.data(site_view);
+        view.set_points(site_pos, Eigen::RowVector3d(1, 1, 0.8));
+        view.point_size = 10;
+        std::vector<std::string> labels;
+        for (Index i = 0; i < n_sites; ++i) {
+            labels.push_back(std::to_string(i));
+        }
+        auto VL = site_pos.rowwise() + Eigen::RowVector3d(0, 0, 0.01);
+        view.set_labels(VL, labels);
+        view.show_custom_labels = true;
+        view.label_size = 4;
+        // view.label_color = Eigen::RowVector4d(0.8, 0, 0, 1);
+    }
+
+    void load_sites(const std::string &path) {
+        std::ifstream file(path);
+        size_t n_metrics;
+        file >> n_metrics;
+
+        gvd.clear_metrics();
+        for (size_t i = 0; i < n_metrics; ++i) {
+            Metric_polyhedron P = metric;
+            Polyhedron_reader<Metric_polyhedron::HalfedgeDS> reader(file);
+            P.delegate(reader);
+            CGAL::set_halfedgeds_items_id(P);
+            gvd.add_metric(P);
+        }
+
+        size_t n_sites;
+        file >> n_sites;
+        gvd.clear_sites();
+        for (size_t i = 0; i < n_sites; ++i) {
+            double x, y, z;
+            Index site_idx;
+            file >> x >> y >> z >> site_idx;
+            gvd.add_site(Point_3(x, y, z), site_idx);
+        }
+        site_colors.setRandom(n_sites, 3);
+        update_sites();
+    }
+
     void random_sites() {
         auto [fbegin, fend] = sm.faces();
         std::vector<SM_face_descriptor> faces(fbegin, fend);
@@ -282,19 +369,7 @@ class GVDApp : public App {
             site_pos.row(i) << pos.x(), pos.y(), pos.z();
         }
         site_colors.setRandom(n_sites, 3);
-
-        auto &view = viewer.data(site_view);
-        view.set_points(site_pos, Eigen::RowVector3d(0.8, 0, 0));
-        view.point_size = 10;
-        std::vector<std::string> labels;
-        for (Index i = 0; i < n_sites; ++i) {
-            labels.push_back(std::to_string(i));
-        }
-        auto VL = site_pos.rowwise() + Eigen::RowVector3d(0, 0, 0.01);
-        view.set_labels(VL, labels);
-        view.show_custom_labels = true;
-        view.label_size = 4;
-        // view.label_color = Eigen::RowVector4d(0.8, 0, 0, 1);
+        update_sites();
     }
 
     void render_texture() {
@@ -528,6 +603,11 @@ class GVDApp : public App {
                 random_sites();
             }
 
+            if (ImGui::Button("Load Sites")) {
+                auto path = igl::file_dialog_open();
+                load_sites(path);
+            }
+
             ImGui::InputScalar("Texture Width", ImGuiDataType_S64, &tex_w);
             ImGui::InputScalar("Texture Height", ImGuiDataType_S64, &tex_h);
 
@@ -604,9 +684,9 @@ class GVDApp : public App {
         }
 
         auto &view = viewer.data(vd_view);
-        view.set_points(V, Eigen::RowVector3d(0, 0, 1));
+        view.set_points(V, Eigen::RowVector3d(0.8, 1, 0.8));
         view.point_size = 10;
-        view.set_edges(V, E, Eigen::RowVector3d(0, 1, 0));
+        view.set_edges(V, E, Eigen::RowVector3d(0.8, 1, 1));
         view.line_width = 4;
         auto VL = V.rowwise() + Eigen::RowVector3d(0, 0, 0.01);
         view.set_labels(VL, labels);
