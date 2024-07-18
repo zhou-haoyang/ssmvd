@@ -253,7 +253,7 @@ class SSM_restricted_voronoi_diagram {
 
         bool operator==(const Cone_descriptor &other) const { return site_idx == other.site_idx && face == other.face; }
 
-        bool is_valid() const { return site_idx >= 0 && face != metric_graph_traits::null_face_descriptor(); }
+        bool is_valid() const { return site_idx >= 0 && face != metric_graph_traits::null_face(); }
     };
 
     //    private:
