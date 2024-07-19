@@ -545,7 +545,7 @@ class SSM_restricted_voronoi_diagram {
                 }
 
                 auto [c, m] = site(site_idx);
-                for (auto &fd : faces(m.graph)) {
+                for (auto fd : faces(m.graph)) {
                     Cone_descriptor k1{site_idx, fd};
                     if (k1 == k_prev) continue;
 
@@ -782,6 +782,7 @@ class SSM_restricted_voronoi_diagram {
                 m_cone.face = fd;
             }
         }
+        CGAL_assertion(d_min < INF);
         return d_min;
     }
 
