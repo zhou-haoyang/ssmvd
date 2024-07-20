@@ -14,6 +14,7 @@
 #include <CGAL/boost/graph/iterator.h>
 #include <CGAL/boost/graph/properties.h>
 
+#include <CGAL/boost/graph/properties_HalfedgeDS_default.h>
 #include <CGAL/config.h>
 #include <CGAL/enum.h>
 #include <CGAL/kernel_assertions.h>
@@ -504,7 +505,8 @@ class SSM_restricted_voronoi_diagram {
 
     void clear_metrics() { metrics.clear(); }
 
-    Cone_descriptor trace_boundary(mesh_halfedge_descriptor bh, Cone_descriptor k0, bool double_sided = true) {
+    Cone_descriptor trace_boundary(mesh_halfedge_descriptor bh, Cone_descriptor k0, bool same_side = true,
+                                   bool opposite_side = true) {
         // Cone_descriptor k0;
         // auto [bhit, bhit_end] = halfedges_around_face(bhd, mesh);
         // bool init = true;
@@ -514,17 +516,21 @@ class SSM_restricted_voronoi_diagram {
         //     find_nearest_site(get(vpm, source(bh, mesh)), k0);
         //     init = false;
         // }
-        CGAL_precondition(!is_border(bh, mesh) && k0.is_valid());
+        CGAL_precondition(k0.is_valid());
         auto b_line = Pline_3::segment(get(vpm, source(bh, mesh)), get(vpm, target(bh, mesh)));
         // vd.add_vertex(b_line.p_min(), Boundary_vertex_info{bh, k0});
 
-        auto b_plane = mesh_face_plane(bh);
         auto bh_opposite = opposite(bh, mesh);
-        if (is_border(bh_opposite, mesh)) {
-            double_sided = false;
+        if (is_border(bh, mesh)) {
+            same_side = false;
         }
-        Plane_3 b_plane_opposite;
-        if (double_sided) b_plane_opposite = mesh_face_plane(bh_opposite);
+        if (is_border(bh_opposite, mesh)) {
+            opposite_side = false;
+        }
+        Plane_3 b_plane, b_plane_opposite;
+        if (same_side) b_plane = mesh_face_plane(bh);
+        if (opposite_side) b_plane_opposite = mesh_face_plane(bh_opposite);
+
         Cone_descriptor k_prev;
 
         // Find all boundary-cone / boundary-bisector intersections
@@ -580,24 +586,25 @@ class SSM_restricted_voronoi_diagram {
                     b_vert_map[bvid] = v_vd;
                 }
 
-                auto bisect_dir = cross_product(bi_plane_min.orthogonal_vector(), b_plane.orthogonal_vector());
-                auto orient = orientation(b_plane.orthogonal_vector(), b_line.d, bisect_dir);
-                auto bisect_line = Pline_3::ray(pt_start, orient == POSITIVE ? bisect_dir : -bisect_dir);
+                if (same_side) {
+                    auto bisect_dir = cross_product(bi_plane_min.orthogonal_vector(), b_plane.orthogonal_vector());
+                    auto orient = orientation(b_plane.orthogonal_vector(), b_line.d, bisect_dir);
+                    auto bisect_line = Pline_3::ray(pt_start, orient == POSITIVE ? bisect_dir : -bisect_dir);
 
-                // auto v_hd = vd.add_loop(v_vd);
-                i_traces.push_back({
-                    bisect_line,
-                    bi_plane_min,
-                    b_plane,
-                    bh,
-                    bh,
-                    k0,
-                    k1_min,
-                    {},
-                    v_vd,
-                });
-
-                if (double_sided && !is_border(bh_opposite, mesh)) {
+                    // auto v_hd = vd.add_loop(v_vd);
+                    i_traces.push_back({
+                        bisect_line,
+                        bi_plane_min,
+                        b_plane,
+                        bh,
+                        bh,
+                        k0,
+                        k1_min,
+                        {},
+                        v_vd,
+                    });
+                }
+                if (opposite_side) {
                     auto bisect_dir =
                         cross_product(bi_plane_min.orthogonal_vector(), b_plane_opposite.orthogonal_vector());
                     auto orient = orientation(b_plane_opposite.orthogonal_vector(), -b_line.d, bisect_dir);
@@ -654,9 +661,15 @@ class SSM_restricted_voronoi_diagram {
             auto [hd, k0] = queue.back();
             queue.pop_back();
             if (is_border(hd, mesh)) {
-                // TODO
+                auto bhd = hd;
+                auto kb = k0;
+                do {
+                    kb = trace_boundary(bhd, kb, false, true);
+                    put(edge_visited, edge(bhd, mesh), true);
+                    bhd = next(bhd, mesh);
+                } while (bhd != hd);
             } else {
-                auto k = trace_boundary(hd, k0);
+                auto k = trace_boundary(hd, k0, true, true);
                 for (auto hd_inner : halfedges_around_source(target(hd, mesh), mesh)) {
                     if (get(edge_visited, edge(hd_inner, mesh))) continue;
                     queue.emplace_back(hd_inner, k);
