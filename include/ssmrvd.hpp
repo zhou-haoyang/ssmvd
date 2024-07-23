@@ -74,6 +74,8 @@ struct Parametric_line_3 {
     Point_3 p_min() const { return p + t_min * d; }
 
     Point_3 p_max() const { return p + t_max * d; }
+
+    bool is_point() const { return is_zero(t_min - t_max); }
 };
 
 template <class K, class T>
@@ -637,6 +639,8 @@ class SSM_restricted_voronoi_diagram {
                 k_prev = k0;
                 auto [c0, m0] = site(k0.site_idx);
                 k0.face = face(opposite(*h_max, m0.graph), m0.graph);
+                b_line.t_min = b_segment.t_max;
+                // if (b_line.is_point()) break;
             }
         }
         return k0;
