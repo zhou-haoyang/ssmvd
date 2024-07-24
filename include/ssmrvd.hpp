@@ -336,7 +336,9 @@ class SSM_restricted_voronoi_diagram {
 
     struct Two_site_bisector_info {
         mesh_halfedge_descriptor hd;
-        Cone_descriptor k0, k1;
+        Cone_descriptor k0;
+        index_t c1;
+        metric_halfedge_descriptor hd1;
     };
 
     struct Three_site_bisector_info {
@@ -1080,7 +1082,8 @@ class SSM_restricted_voronoi_diagram {
                 bisect_dir = -bisect_dir;
             }
             auto bisect_line = Pline_3::ray(bi_ray.p_max(), bisect_dir);
-            auto v_vd = vd.add_vertex(bi_ray.p_max(), Two_site_bisector_info{tr.face_hd, k0_next, k1_next});
+            auto v_vd =
+                vd.add_vertex(bi_ray.p_max(), Two_site_bisector_info{tr.face_hd, k0_next, k1_next.site_idx, *h_max});
             vd.connect(tr.v_vd, v_vd, vd.fd0, vd.fd0);
             vert_map[vid] = v_vd;
             // auto v_hd = vd.add_loop(v_vd);
