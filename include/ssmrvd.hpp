@@ -135,14 +135,15 @@ Parametric_line_3<K, T> edge_segment(typename boost::graph_traits<FaceGraph>::ha
 }
 
 namespace SSM_restricted_voronoi_diagram {
-template <class Kernel, class MetricPolyhedron, class SurfaceMesh, class VoronoiDiagramGraph,
-          class MeshVertexPointPMap = typename boost::property_map<SurfaceMesh, vertex_point_t>::const_type,
-          class MeshFaceIndexPMap = typename boost::property_map<SurfaceMesh, face_index_t>::const_type,
-          class MeshEdgeIndexPMap = typename boost::property_map<SurfaceMesh, edge_index_t>::const_type,
-          class MetricVertexPointPMap = typename boost::property_map<MetricPolyhedron, vertex_point_t>::const_type,
-          class MetricFaceIndexPMap = typename boost::property_map<MetricPolyhedron, face_index_t>::const_type,
-          class VoronoiDiagramVertexPointPMap =
-              typename boost::property_map<VoronoiDiagramGraph, vertex_point_t>::const_type>
+template <
+    class Kernel, class MetricPolyhedron, class SurfaceMesh, class VoronoiDiagramGraph,
+    class MeshVertexPointPMap = typename boost::property_map<SurfaceMesh, vertex_point_t>::const_type,
+    class MeshFaceIndexPMap = typename boost::property_map<SurfaceMesh, face_index_t>::const_type,
+    class MeshEdgeIndexPMap = typename boost::property_map<SurfaceMesh, edge_index_t>::const_type,
+    class MetricVertexPointPMap = typename boost::property_map<MetricPolyhedron, vertex_point_t>::const_type,
+    class MetricFaceIndexPMap = typename boost::property_map<MetricPolyhedron, face_index_t>::const_type,
+    class VoronoiDiagramVertexPointPMap = typename boost::property_map<VoronoiDiagramGraph, vertex_point_t>::const_type,
+    class VoronoiDiagramVertexIndexPMap = typename boost::property_map<VoronoiDiagramGraph, vertex_index_t>::const_type>
 class SSM_restricted_voronoi_diagram {
    public:
     using FT = Kernel::FT;
@@ -362,12 +363,14 @@ class SSM_restricted_voronoi_diagram {
 
         VoronoiDiagramGraph graph;
         VoronoiDiagramVertexPointPMap vpm;
+        VoronoiDiagramVertexIndexPMap vertex_index_map;
         Vertex_info_map vertex_info_map;
         Vertex_normal_map vertex_normal_map;
         face_descriptor fd0;
 
         Voronoi_diagram()
             : vpm(get(vertex_point, graph)),
+              vertex_index_map(get(vertex_index, graph)),
               vertex_info_map(get(Vertex_info_property{}, graph)),
               vertex_normal_map(get(Vertex_normal_property{}, graph)) {
             fd0 = add_face(graph);
@@ -376,6 +379,7 @@ class SSM_restricted_voronoi_diagram {
         vertex_descriptor add_vertex(const Point_3 &p, const Vertex_info &info, const Vector_3 &n = {}) {
             auto vd = CGAL::add_vertex(graph);
             put(vpm, vd, p);
+            // put(vertex_index_map, vd, num_vertices(graph) - 1);
             put(vertex_info_map, vd, info);
             put(vertex_normal_map, vd, n);
             return vd;
