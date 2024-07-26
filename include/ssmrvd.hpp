@@ -1,5 +1,9 @@
 #pragma once
 
+#include <ssmrvd/SSM_restricted_voronoi_diagram_traits.hpp>
+#include <ssmrvd/Parametric_line_3.hpp>
+
+#include <CGAL/Default.h>
 #include <CGAL/Dynamic_property_map.h>
 #include <CGAL/Kernel/global_functions_3.h>
 #include <CGAL/Origin.h>
@@ -37,138 +41,59 @@ namespace CGAL {
 // using MetricVertexPointPMap = typename boost::property_map<MetricPolyhedron, vertex_point_t>::const_type;
 // using VoronoiDiagramVertexPointPMap = typename boost::property_map<VoronoiDiagramGraph, vertex_point_t>::const_type;
 
-template <class Kernel, class T = double>
-struct Parametric_line_3 {
-    static constexpr auto INF = std::numeric_limits<T>::infinity();
-
-    using FT = Kernel::FT;
-    using Point_3 = Kernel::Point_3;
-    using Vector_3 = Kernel::Vector_3;
-
-    Point_3 p;
-    Vector_3 d;
-    T t_min = -INF, t_max = INF;
-
-    Parametric_line_3(Point_3 p = {}, Vector_3 d = {}, T t0 = -INF, T t1 = INF)
-        : p(std::move(p)), d(std::move(d)), t_min(std::min(t0, t1)), t_max(std::max(t0, t1)) {}
-
-    Parametric_line_3(const Kernel::Line_3 &line, T t0 = -INF, T t1 = INF)
-        : Parametric_line_3(line.point(0), line.to_vector(), t0, t1) {}
-
-    static Parametric_line_3 segment(const Point_3 &p0, const Point_3 &p1) {
-        return Parametric_line_3(p0, p1 - p0, 0, 1);
-    }
-
-    static Parametric_line_3 ray(const Point_3 &p0, const Vector_3 &d) { return Parametric_line_3(p0, d, 0, INF); }
-
-    static Parametric_line_3 line(const Point_3 &p0, const Point_3 &p1) {
-        return Parametric_line_3(p0, p1 - p0, -INF, INF);
-    }
-
-    Point_3 operator()(FT t) const { return p + t * d; }
-
-    Parametric_line_3 reverse() const { return Parametric_line_3(p, -d, -t_max, -t_min); }
-
-    void reverse_inplace() { *this = reverse(); }
-
-    Point_3 p_min() const { return p + t_min * d; }
-
-    Point_3 p_max() const { return p + t_max * d; }
-
-    bool is_point() const { return is_zero(t_min - t_max); }
-};
-
-template <class K, class T>
-bool isect(const Parametric_line_3<K, T> &l, const typename K::Vector_3 &n, const typename K::FT &D, T &t) {
-    auto nd = scalar_product(n, l.d), np = scalar_product(n, l.p - ORIGIN) + D;
-    if (is_zero(nd)) {
-        t = std::numeric_limits<T>::infinity();
-        return is_zero(np);
-    }
-    t = -np / nd;
-    return t >= l.t_min && t <= l.t_max;
-}
-
-template <class K, class T>
-bool isect(const Parametric_line_3<K, T> &l, const typename K::Plane_3 &p, T &t) {
-    return isect(l, p.orthogonal_vector(), p.d(), t);
-}
-
-template <class K, class T>
-bool isect(const Parametric_line_3<K, T> &l0, const Parametric_line_3<K, T> &l1, T &t0, T &t1, bool coplanar = false) {
-    auto d0 = l0.d, d1 = l1.d;
-    auto p0 = l0.p, p1 = l1.p;
-    auto n = cross_product(d0, d1);
-    if (is_zero(n.squared_length())) {
-        // parallel
-        return false;
-    }
-
-    auto tn0 = cross_product((p1 - p0), d1);
-    if (!coplanar && !is_zero(scalar_product(tn0, n))) {
-        // not coplanar
-        return false;
-    }
-    t0 = tn0.x() / n.x();
-    auto tn1 = cross_product((p1 - p0), d0);
-    t1 = tn1.x() / n.x();
-
-    if (t0 < l0.t_min || t0 > l0.t_max || t1 < l1.t_min || t1 > l1.t_max) {
-        return false;
-    }
-    return true;
-}
-
-template <class Kernel, class FaceGraph, class VPMap>
-Kernel::Plane_3 supporting_plane(typename boost::graph_traits<FaceGraph>::halfedge_descriptor hd, const FaceGraph &g,
-                                 const VPMap &vpm) {
-    auto i0 = source(hd, g), i1 = target(hd, g), i2 = target(next(hd, g), g);
-    auto v0 = get(vpm, i0), v1 = get(vpm, i1), v2 = get(vpm, i2);
-    return {v0, v1, v2};
-}
-
-template <class K, class T, class FaceGraph, class VPMap>
-Parametric_line_3<K, T> edge_segment(typename boost::graph_traits<FaceGraph>::halfedge_descriptor hd,
-                                     const FaceGraph &g, const VPMap &vpm) {
-    auto i0 = source(hd, g), i1 = target(hd, g);
-    return Parametric_line_3<K, T>::segment(get(vpm, i0), get(vpm, i1));
-}
-
 namespace SSM_restricted_voronoi_diagram {
-template <
-    class Kernel, class MetricPolyhedron, class SurfaceMesh, class VoronoiDiagramGraph,
-    class MeshVertexPointPMap = typename boost::property_map<SurfaceMesh, vertex_point_t>::const_type,
-    class MeshFaceIndexPMap = typename boost::property_map<SurfaceMesh, face_index_t>::const_type,
-    class MeshEdgeIndexPMap = typename boost::property_map<SurfaceMesh, edge_index_t>::const_type,
-    class MetricVertexPointPMap = typename boost::property_map<MetricPolyhedron, vertex_point_t>::const_type,
-    class MetricFaceIndexPMap = typename boost::property_map<MetricPolyhedron, face_index_t>::const_type,
-    class VoronoiDiagramVertexPointPMap = typename boost::property_map<VoronoiDiagramGraph, vertex_point_t>::const_type,
-    class VoronoiDiagramVertexIndexPMap = typename boost::property_map<VoronoiDiagramGraph, vertex_index_t>::const_type>
+template <class Traits, class MeshVertexPointPMap = Default, class MeshFaceIndexPMap = Default,
+          class MeshEdgeIndexPMap = Default, class MetricVertexPointPMap = Default, class MetricFaceIndexPMap = Default,
+          class VoronoiDiagramVertexPointPMap = Default, class VoronoiDiagramVertexIndexPMap = Default>
 class SSM_restricted_voronoi_diagram {
    public:
-    using FT = Kernel::FT;
-    using T = FT;
-    using Point_3 = Kernel::Point_3;
-    using Vector_3 = Kernel::Vector_3;
-    using Ray_3 = Kernel::Ray_3;
-    using Plane_3 = Kernel::Plane_3;
-    using Line_3 = Kernel::Line_3;
-    using Pline_3 = Parametric_line_3<Kernel, T>;
+    using T = Traits::T;
+    using FT = Traits::FT;
+    using Point_3 = Traits::Point_3;
+    using Vector_3 = Traits::Vector_3;
+    using Ray_3 = Traits::Ray_3;
+    using Plane_3 = Traits::Plane_3;
+    using Line_3 = Traits::Line_3;
+    using Pline_3 = Traits::Pline_3;
 
-    using Metric_AABB_tree = AABB_tree<AABB_traits<Kernel, AABB_face_graph_triangle_primitive<MetricPolyhedron>>>;
+    using Surface_mesh = Traits::Surface_mesh;
+    using Metric_polyhedron = Traits::Metric_polyhedron;
+    using Voronoi_diagram_graph = Traits::Voronoi_diagram;
+    using Metric_AABB_tree = Traits::Metric_AABB_tree;
 
     using index_t = std::ptrdiff_t;
 
-    using mesh_graph_traits = typename boost::graph_traits<SurfaceMesh>;
+    using mesh_graph_traits = typename boost::graph_traits<Surface_mesh>;
     using mesh_vertex_descriptor = mesh_graph_traits::vertex_descriptor;
     using mesh_face_descriptor = mesh_graph_traits::face_descriptor;
     using mesh_halfedge_descriptor = mesh_graph_traits::halfedge_descriptor;
 
-    using metric_graph_traits = typename boost::graph_traits<MetricPolyhedron>;
+    using metric_graph_traits = typename boost::graph_traits<Metric_polyhedron>;
     using metric_face_descriptor = metric_graph_traits::face_descriptor;
     using metric_face_iterator = metric_graph_traits::face_iterator;
     using metric_halfedge_descriptor = metric_graph_traits::halfedge_descriptor;
     using metric_halfedge_descriptor_opt = std::optional<metric_halfedge_descriptor>;
+
+    using Mesh_vertex_point_pmap =
+        Default::Get<MeshVertexPointPMap, typename boost::property_map<Surface_mesh, vertex_point_t>::const_type>::type;
+    using Mesh_face_index_pmap =
+        Default::Get<MeshFaceIndexPMap, typename boost::property_map<Surface_mesh, face_index_t>::const_type>::type;
+    using Mesh_edge_index_pmap =
+        Default::Get<MeshEdgeIndexPMap, typename boost::property_map<Surface_mesh, edge_index_t>::const_type>::type;
+
+    using Metric_vertex_point_pmap =
+        Default::Get<MetricVertexPointPMap,
+                     typename boost::property_map<Metric_polyhedron, vertex_point_t>::const_type>::type;
+    using Metric_face_index_pmap =
+        Default::Get<MetricFaceIndexPMap,
+                     typename boost::property_map<Metric_polyhedron, face_index_t>::const_type>::type;
+
+    using Voronoi_diagram_vertex_point_pmap =
+        Default::Get<VoronoiDiagramVertexPointPMap,
+                     typename boost::property_map<Voronoi_diagram_graph, vertex_point_t>::const_type>::type;
+    using Voronoi_diagram_vertex_index_pmap =
+        Default::Get<VoronoiDiagramVertexIndexPMap,
+                     typename boost::property_map<Voronoi_diagram_graph, vertex_index_t>::const_type>::type;
 
     static constexpr T INF = std::numeric_limits<T>::infinity();
 
@@ -262,12 +187,12 @@ class SSM_restricted_voronoi_diagram {
 
     //    private:
     struct Metric {
-        MetricPolyhedron graph;
-        MetricVertexPointPMap vpm;
-        MetricFaceIndexPMap face_index_map;
+        Metric_polyhedron graph;
+        Metric_vertex_point_pmap vpm;
+        Metric_face_index_pmap face_index_map;
         Metric_AABB_tree tree;
 
-        Metric(MetricPolyhedron graph, MetricVertexPointPMap vpm, MetricFaceIndexPMap fim)
+        Metric(Metric_polyhedron graph, Metric_vertex_point_pmap vpm, Metric_face_index_pmap fim)
             : graph(std::move(graph)), vpm(std::move(vpm)), face_index_map(std::move(fim)) {
             auto [fbegin, fend] = faces(this->graph);
             tree.insert(fbegin, fend, this->graph);
@@ -348,7 +273,7 @@ class SSM_restricted_voronoi_diagram {
     };
 
     struct Voronoi_diagram {
-        using graph_traits = typename boost::graph_traits<VoronoiDiagramGraph>;
+        using graph_traits = typename boost::graph_traits<Voronoi_diagram_graph>;
         using vertex_descriptor = graph_traits::vertex_descriptor;
         using edge_descriptor = graph_traits::edge_descriptor;
         using halfedge_descriptor = graph_traits::halfedge_descriptor;
@@ -357,13 +282,13 @@ class SSM_restricted_voronoi_diagram {
         using Vertex_info = std::variant<Boundary_vertex_info, Boundary_cone_info, Boundary_bisector_info,
                                          Two_site_bisector_info, Three_site_bisector_info>;
         using Vertex_info_property = CGAL::dynamic_vertex_property_t<Vertex_info>;
-        using Vertex_info_map = typename boost::property_map<VoronoiDiagramGraph, Vertex_info_property>::type;
+        using Vertex_info_map = typename boost::property_map<Voronoi_diagram_graph, Vertex_info_property>::type;
         using Vertex_normal_property = CGAL::dynamic_vertex_property_t<Vector_3>;
-        using Vertex_normal_map = typename boost::property_map<VoronoiDiagramGraph, Vertex_normal_property>::type;
+        using Vertex_normal_map = typename boost::property_map<Voronoi_diagram_graph, Vertex_normal_property>::type;
 
-        VoronoiDiagramGraph graph;
-        VoronoiDiagramVertexPointPMap vpm;
-        VoronoiDiagramVertexIndexPMap vertex_index_map;
+        Voronoi_diagram_graph graph;
+        Voronoi_diagram_vertex_point_pmap vpm;
+        Voronoi_diagram_vertex_index_pmap vertex_index_map;
         Vertex_info_map vertex_info_map;
         Vertex_normal_map vertex_normal_map;
         face_descriptor fd0;
@@ -490,24 +415,24 @@ class SSM_restricted_voronoi_diagram {
     // };
 
    public:
-    SSM_restricted_voronoi_diagram(const SurfaceMesh &mesh, MeshVertexPointPMap vpm, MeshFaceIndexPMap face_index_map,
-                                   MeshEdgeIndexPMap edge_index_map)
+    SSM_restricted_voronoi_diagram(const Surface_mesh &mesh, Mesh_vertex_point_pmap vpm,
+                                   Mesh_face_index_pmap face_index_map, Mesh_edge_index_pmap edge_index_map)
         : mesh(mesh),
           vpm(std::move(vpm)),
           face_index_map(std::move(face_index_map)),
           edge_index_map(std::move(edge_index_map)) {}
-    SSM_restricted_voronoi_diagram(const SurfaceMesh &mesh)
+    SSM_restricted_voronoi_diagram(const Surface_mesh &mesh)
         : SSM_restricted_voronoi_diagram(mesh, get(vertex_point, mesh), get(face_index, mesh), get(edge_index, mesh)) {}
 
     void add_site(const Point_3 &p, index_t metric_idx) { sites.push_back({p, metric_idx}); }
 
-    index_t add_metric(MetricPolyhedron m, MetricVertexPointPMap vpm, MetricFaceIndexPMap fim) {
+    index_t add_metric(Metric_polyhedron m, Metric_vertex_point_pmap vpm, Metric_face_index_pmap fim) {
         auto idx = metrics.size();
         metrics.emplace_back(std::move(m), std::move(vpm), std::move(fim));
         return idx;
     }
 
-    index_t add_metric(MetricPolyhedron m) { return add_metric(m, get(vertex_point, m), get(face_index, m)); }
+    index_t add_metric(Metric_polyhedron m) { return add_metric(m, get(vertex_point, m), get(face_index, m)); }
 
     void clear_sites() { sites.clear(); }
 
@@ -657,7 +582,7 @@ class SSM_restricted_voronoi_diagram {
         find_nearest_site(get(vpm, vd), k0);
 
         using edge_bool_t = CGAL::dynamic_edge_property_t<bool>;
-        using edge_visited_map = typename boost::property_map<SurfaceMesh, edge_bool_t>::type;
+        using edge_visited_map = typename boost::property_map<Surface_mesh, edge_bool_t>::type;
 
         auto edge_visited = get(edge_bool_t{}, mesh);
 
@@ -729,10 +654,10 @@ class SSM_restricted_voronoi_diagram {
     std::vector<Metric> metrics;
     // AABBTree tree;
 
-    const SurfaceMesh &mesh;
-    MeshVertexPointPMap vpm;
-    MeshFaceIndexPMap face_index_map;
-    MeshEdgeIndexPMap edge_index_map;
+    const Surface_mesh &mesh;
+    Mesh_vertex_point_pmap vpm;
+    Mesh_face_index_pmap face_index_map;
+    Mesh_edge_index_pmap edge_index_map;
 
     Voronoi_diagram vd;
 
@@ -809,11 +734,26 @@ class SSM_restricted_voronoi_diagram {
         return d_min;
     }
 
-    Plane_3 metric_face_plane(const Metric &m, metric_face_descriptor fd) const {
-        return supporting_plane<Kernel>(halfedge(fd, m.graph), m.graph, m.vpm);
+    template <class FaceGraph, class VPMap>
+    static Plane_3 supporting_plane(typename boost::graph_traits<FaceGraph>::halfedge_descriptor hd, const FaceGraph &g,
+                                    const VPMap &vpm) {
+        auto i0 = source(hd, g), i1 = target(hd, g), i2 = target(next(hd, g), g);
+        auto v0 = get(vpm, i0), v1 = get(vpm, i1), v2 = get(vpm, i2);
+        return {v0, v1, v2};
     }
 
-    Plane_3 mesh_face_plane(mesh_halfedge_descriptor hd) const { return supporting_plane<Kernel>(hd, mesh, vpm); }
+    template <class FaceGraph, class VPMap>
+    static Pline_3 edge_segment(typename boost::graph_traits<FaceGraph>::halfedge_descriptor hd, const FaceGraph &g,
+                                const VPMap &vpm) {
+        auto i0 = source(hd, g), i1 = target(hd, g);
+        return Pline_3::segment(get(vpm, i0), get(vpm, i1));
+    }
+
+    Plane_3 metric_face_plane(const Metric &m, metric_face_descriptor fd) const {
+        return supporting_plane(halfedge(fd, m.graph), m.graph, m.vpm);
+    }
+
+    Plane_3 mesh_face_plane(mesh_halfedge_descriptor hd) const { return supporting_plane(hd, mesh, vpm); }
 
     Plane_3 get_bisect_plane(const Cone_descriptor &k0, const Cone_descriptor &k1) const {
         auto [c0, m0] = site(k0.site_idx);
@@ -950,7 +890,7 @@ class SSM_restricted_voronoi_diagram {
         Pline_3 edge;
         for (auto hd : halfedges_around_face(tr.face_hd, mesh)) {
             if (tr.prev_hd.has_value() && hd == *tr.prev_hd) continue;
-            edge = edge_segment<Kernel, T>(hd, mesh, vpm);
+            edge = edge_segment(hd, mesh, vpm);
             T t_edge, _;
             auto res = CGAL::isect(bi_ray, edge, t_edge, _, true);
             if (res && !is_zero(t_edge)) {
