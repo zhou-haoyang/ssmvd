@@ -429,9 +429,41 @@ class SSM_restricted_voronoi_diagram {
 
     index_t add_metric(Metric_polyhedron m) { return add_metric(m, get(vertex_point, m), get(face_index, m)); }
 
+    void reserve_sites(std::size_t n) { sites.reserve(n); }
+
+    void reserve_metrics(std::size_t n) { metrics.reserve(n); }
+
     void clear_sites() { sites.clear(); }
 
     void clear_metrics() { metrics.clear(); }
+
+    std::size_t num_sites() const { return sites.size(); }
+
+    std::size_t num_metrics() const { return metrics.size(); }
+
+    std::size_t num_i_traces() const { return i_traces.size(); }
+
+    auto site_cbegin() const { return sites.begin(); }
+
+    auto site_cend() const { return sites.end(); }
+
+    auto metric_cbegin() const { return metrics.begin(); }
+
+    auto metric_cend() const { return metrics.end(); }
+
+    auto i_trace_cbegin() const { return i_traces.begin(); }
+
+    auto i_trace_cend() const { return i_traces.end(); }
+
+    std::pair<Site &, Metric_data &> site(index_t idx) {
+        auto &c = sites[idx];
+        return {c, metrics[c.metric_idx]};
+    }
+
+    std::pair<const Site &, const Metric_data &> site(index_t idx) const {
+        auto &c = sites[idx];
+        return {c, metrics[c.metric_idx]};
+    }
 
     T find_nearest_site(const Point_3 &p, Cone_descriptor &m_cone) const {
         // build_tree();  // TODO: rebuild only when necessary
@@ -702,16 +734,6 @@ class SSM_restricted_voronoi_diagram {
     std::unordered_map<Internal_vertex_id, vd_vertex_descriptor, Internal_vertex_id_hash> vert_map;
 
     std::unordered_map<Boundary_vertex_id, vd_vertex_descriptor, Boundary_vertex_id_hash> b_vert_map;
-
-    std::pair<Site &, Metric_data &> site(index_t idx) {
-        auto &c = sites[idx];
-        return {c, metrics[c.metric_idx]};
-    }
-
-    std::pair<const Site &, const Metric_data &> site(index_t idx) const {
-        auto &c = sites[idx];
-        return {c, metrics[c.metric_idx]};
-    }
 
     Cone_index cone_index(const Cone_descriptor &k) const {
         auto [c, m] = site(k.site_idx);
