@@ -327,10 +327,10 @@ class GVDApp : public App {
         file >> n_metrics;
 
         gvd.clear_metrics();
+        gvd.metrics.reserve(n_metrics);
         for (size_t i = 0; i < n_metrics; ++i) {
-            Metric_polyhedron P = metric;
-            Polyhedron_reader<Metric_polyhedron::HalfedgeDS> reader(file);
-            P.delegate(reader);
+            Metric_polyhedron P;
+            file >> P;
             CGAL::set_halfedgeds_items_id(P);
             gvd.add_metric(P);
         }
