@@ -70,6 +70,12 @@ class SSM_restricted_voronoi_diagram {
     using metric_halfedge_descriptor = metric_graph_traits::halfedge_descriptor;
     using metric_halfedge_descriptor_opt = std::optional<metric_halfedge_descriptor>;
 
+    using vd_graph_traits = typename boost::graph_traits<Voronoi_diagram_graph>;
+    using vd_vertex_descriptor = vd_graph_traits::vertex_descriptor;
+    using vd_edge_descriptor = vd_graph_traits::edge_descriptor;
+    using vd_halfedge_descriptor = vd_graph_traits::halfedge_descriptor;
+    using vd_face_descriptor = vd_graph_traits::face_descriptor;
+
     using Mesh_vertex_point_pmap =
         Default::Get<MeshVertexPointPMap, typename boost::property_map<Surface_mesh, vertex_point_t>::const_type>::type;
     using Mesh_face_index_pmap =
@@ -182,13 +188,13 @@ class SSM_restricted_voronoi_diagram {
     };
 
     //    private:
-    struct Metric {
+    struct Metric_data {
         Metric_polyhedron graph;
         Metric_vertex_point_pmap vpm;
         Metric_face_index_pmap face_index_map;
         Metric_AABB_tree tree;
 
-        Metric(Metric_polyhedron graph, Metric_vertex_point_pmap vpm, Metric_face_index_pmap fim)
+        Metric_data(Metric_polyhedron graph, Metric_vertex_point_pmap vpm, Metric_face_index_pmap fim)
             : graph(std::move(graph)), vpm(std::move(vpm)), face_index_map(std::move(fim)) {
             auto [fbegin, fend] = faces(this->graph);
             tree.insert(fbegin, fend, this->graph);
@@ -268,15 +274,10 @@ class SSM_restricted_voronoi_diagram {
         Cone_descriptor k0, k1, k2;
     };
 
-    struct Voronoi_diagram {
-        using graph_traits = typename boost::graph_traits<Voronoi_diagram_graph>;
-        using vertex_descriptor = graph_traits::vertex_descriptor;
-        using edge_descriptor = graph_traits::edge_descriptor;
-        using halfedge_descriptor = graph_traits::halfedge_descriptor;
-        using face_descriptor = graph_traits::face_descriptor;
+    using Vertex_info = std::variant<Boundary_vertex_info, Boundary_cone_info, Boundary_bisector_info,
+                                     Two_site_bisector_info, Three_site_bisector_info>;
 
-        using Vertex_info = std::variant<Boundary_vertex_info, Boundary_cone_info, Boundary_bisector_info,
-                                         Two_site_bisector_info, Three_site_bisector_info>;
+    struct Voronoi_diagram_data {
         using Vertex_info_property = CGAL::dynamic_vertex_property_t<Vertex_info>;
         using Vertex_info_map = typename boost::property_map<Voronoi_diagram_graph, Vertex_info_property>::type;
         using Vertex_normal_property = CGAL::dynamic_vertex_property_t<Vector_3>;
@@ -287,9 +288,9 @@ class SSM_restricted_voronoi_diagram {
         Voronoi_diagram_vertex_index_pmap vertex_index_map;
         Vertex_info_map vertex_info_map;
         Vertex_normal_map vertex_normal_map;
-        face_descriptor fd0;
+        vd_face_descriptor fd0;
 
-        Voronoi_diagram()
+        Voronoi_diagram_data()
             : vpm(get(vertex_point, graph)),
               vertex_index_map(get(vertex_index, graph)),
               vertex_info_map(get(Vertex_info_property{}, graph)),
@@ -297,7 +298,7 @@ class SSM_restricted_voronoi_diagram {
             fd0 = add_face(graph);
         }
 
-        vertex_descriptor add_vertex(const Point_3 &p, const Vertex_info &info, const Vector_3 &n = {}) {
+        vd_vertex_descriptor add_vertex(const Point_3 &p, const Vertex_info &info, const Vector_3 &n = {}) {
             auto vd = CGAL::add_vertex(graph);
             put(vpm, vd, p);
             // put(vertex_index_map, vd, num_vertices(graph) - 1);
@@ -306,7 +307,7 @@ class SSM_restricted_voronoi_diagram {
             return vd;
         }
 
-        void print_halfedge_loop(vertex_descriptor v) {
+        void print_halfedge_loop(vd_vertex_descriptor v) {
             for (auto hd : halfedges_around_target(v, graph)) {
                 std::cerr << hd << "(" << source(hd, graph) << ", " << target(hd, graph) << ")" << " ";
             }
@@ -314,10 +315,10 @@ class SSM_restricted_voronoi_diagram {
             std::cerr.flush();
         }
 
-        void insert_halfedge_loop(halfedge_descriptor hd) {
+        void insert_halfedge_loop(vd_halfedge_descriptor hd) {
             auto vt = target(hd, graph), vs = source(hd, graph);
             auto hd_cur = halfedge(vt, graph);
-            if (hd_cur == graph_traits::null_halfedge()) {
+            if (hd_cur == vd_graph_traits::null_halfedge()) {
                 set_halfedge(vt, hd, graph);
                 return;
             }
@@ -346,9 +347,9 @@ class SSM_restricted_voronoi_diagram {
             set_next(hd_cur, opposite(hd, graph), graph);
         }
 
-        halfedge_descriptor connect(vertex_descriptor v0, vertex_descriptor v1, face_descriptor fd01 = {},
-                                    face_descriptor fd10 = {}) {
-            if (halfedge(v1, graph) != graph_traits::null_halfedge()) {
+        vd_halfedge_descriptor connect(vd_vertex_descriptor v0, vd_vertex_descriptor v1, vd_face_descriptor fd01 = {},
+                                       vd_face_descriptor fd10 = {}) {
+            if (halfedge(v1, graph) != vd_graph_traits::null_halfedge()) {
                 for (auto hd : halfedges_around_target(v1, graph)) {
                     if (source(hd, graph) == v0) return hd;
                 }
@@ -388,7 +389,7 @@ class SSM_restricted_voronoi_diagram {
         mesh_halfedge_descriptor face_hd;
         std::optional<mesh_halfedge_descriptor> prev_hd;
         Cone_descriptor k0, k1, k_prev;
-        Voronoi_diagram::vertex_descriptor v_vd;
+        vd_vertex_descriptor v_vd;
     };
 
     // class Cone_iterator {
@@ -507,7 +508,7 @@ class SSM_restricted_voronoi_diagram {
                 // auto edge_hd = opposite(bh, mesh);
                 Boundary_vertex_id bvid(cone_index(k0), cone_index(k1_min), get(edge_index_map, edge(bh, mesh)));
                 auto pt_start = b_segment(tb_min);
-                typename Voronoi_diagram::vertex_descriptor v_vd;
+                vd_vertex_descriptor v_vd;
                 if (auto vd_it = b_vert_map.find(bvid); vd_it != b_vert_map.cend()) {
                     v_vd = vd_it->second;
                 } else {
@@ -618,7 +619,7 @@ class SSM_restricted_voronoi_diagram {
     void reload() { vpm = get(vertex_point, mesh); }
 
     void reset() {
-        vd = Voronoi_diagram();
+        vd = Voronoi_diagram_data();
         i_traces.clear();
         vert_map.clear();
         b_vert_map.clear();
@@ -644,10 +645,12 @@ class SSM_restricted_voronoi_diagram {
         CGAL_postcondition(is_valid_face_graph(vd.graph, true));
     }
 
+    const Voronoi_diagram_data &voronoi_diagram() const { return vd; }
+
     //    private:
     std::vector<Site> sites;
 
-    std::vector<Metric> metrics;
+    std::vector<Metric_data> metrics;
     // AABBTree tree;
 
     const Surface_mesh &mesh;
@@ -655,21 +658,19 @@ class SSM_restricted_voronoi_diagram {
     Mesh_face_index_pmap face_index_map;
     Mesh_edge_index_pmap edge_index_map;
 
-    Voronoi_diagram vd;
+    Voronoi_diagram_data vd;
 
     std::deque<InternalTrace> i_traces;
-    std::unordered_map<Internal_vertex_id, typename Voronoi_diagram::vertex_descriptor, Internal_vertex_id_hash>
-        vert_map;
+    std::unordered_map<Internal_vertex_id, vd_vertex_descriptor, Internal_vertex_id_hash> vert_map;
 
-    std::unordered_map<Boundary_vertex_id, typename Voronoi_diagram::vertex_descriptor, Boundary_vertex_id_hash>
-        b_vert_map;
+    std::unordered_map<Boundary_vertex_id, vd_vertex_descriptor, Boundary_vertex_id_hash> b_vert_map;
 
-    std::pair<Site &, Metric &> site(index_t idx) {
+    std::pair<Site &, Metric_data &> site(index_t idx) {
         auto &c = sites[idx];
         return {c, metrics[c.metric_idx]};
     }
 
-    std::pair<const Site &, const Metric &> site(index_t idx) const {
+    std::pair<const Site &, const Metric_data &> site(index_t idx) const {
         auto &c = sites[idx];
         return {c, metrics[c.metric_idx]};
     }
@@ -745,7 +746,7 @@ class SSM_restricted_voronoi_diagram {
         return Pline_3::segment(get(vpm, i0), get(vpm, i1));
     }
 
-    Plane_3 metric_face_plane(const Metric &m, metric_face_descriptor fd) const {
+    Plane_3 metric_face_plane(const Metric_data &m, metric_face_descriptor fd) const {
         return supporting_plane(halfedge(fd, m.graph), m.graph, m.vpm);
     }
 
