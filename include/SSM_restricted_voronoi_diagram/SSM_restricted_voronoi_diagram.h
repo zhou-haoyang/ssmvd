@@ -319,7 +319,7 @@ class SSM_restricted_voronoi_diagram {
         }
     };
 
-    struct InternalTrace {
+    struct Internal_trace {
         Pline_3 bisect_line;
         Plane_3 bisect_plane, face_plane;
         mesh_halfedge_descriptor face_hd;
@@ -662,7 +662,7 @@ class SSM_restricted_voronoi_diagram {
 
     Voronoi_diagram_data vd;
 
-    std::deque<InternalTrace> i_traces;
+    std::deque<Internal_trace> i_traces;
     std::unordered_map<Internal_vertex_id, vd_vertex_descriptor, Internal_vertex_id_hash> vert_map;
 
     std::unordered_map<Boundary_vertex_id, vd_vertex_descriptor, Boundary_vertex_id_hash> b_vert_map;
@@ -819,7 +819,7 @@ class SSM_restricted_voronoi_diagram {
         return t_min < t_max;
     }
 
-    void process_i_trace(const InternalTrace &tr) {
+    void process_i_trace(const Internal_trace &tr) {
         auto bi_ray = tr.bisect_line;
 
         // Clip the bisector ray with the face on mesh
