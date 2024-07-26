@@ -27,16 +27,6 @@
 #include <vector>
 
 namespace CGAL {
-
-// typedef CGAL::Simple_cartesian<double> Kernel;
-// typedef CGAL::Surface_mesh<Kernel::Point_3> SurfaceMesh;
-// typedef CGAL::Polyhedron_3<Kernel> MetricPolyhedron;
-// typedef CGAL::Surface_mesh<Kernel::Point_3> VoronoiDiagramGraph;
-
-// using MeshVertexPointPMap = typename boost::property_map<SurfaceMesh, vertex_point_t>::const_type;
-// using MetricVertexPointPMap = typename boost::property_map<MetricPolyhedron, vertex_point_t>::const_type;
-// using VoronoiDiagramVertexPointPMap = typename boost::property_map<VoronoiDiagramGraph, vertex_point_t>::const_type;
-
 namespace SSM_restricted_voronoi_diagram {
 template <class Traits, class MeshVertexPointPMap = Default, class MeshFaceIndexPMap = Default,
           class MeshEdgeIndexPMap = Default, class MetricVertexPointPMap = Default, class MetricFaceIndexPMap = Default,
@@ -370,44 +360,7 @@ class SSM_restricted_voronoi_diagram {
             Vector_3 n = cross_product(v0, v1);
             return n;
         }
-
-        // bool isect(const Pline_3 &l) {
-        //     auto n = m.cone_face_orthogonal_vector(hd);
-        //     FT nd = scalar_product(n, l_inf.d);
-        //     if (is_zero(nd)) {
-        //         // TODO: handle the case that the line lies on the face
-        //         return false;
-        //     }
-
-        //     FT np = scalar_product(n, l_inf.p - ORIGIN);
-        //     FT ti = -np / nd;
-        //     Point_3 pi = l_inf(ti);
-        //     Vector_3 vi = pi - ORIGIN;
-        //     if (!(orientation(n, v0, vi) == POSITIVE && orientation(n, vi, v1) == POSITIVE)) {
-        //         // p_i is outside the 2D cone
-        //         continue;
-        //     }
-        // }
     };
-
-    // class Cone_iterator {
-    //     index_t site_idx;
-    //     site_iterator site_it;
-    //     metric_face_iterator face_it, face_end;
-
-    //    public:
-    //     using iterator_category = std::forward_iterator_tag;
-    //     using value_type = Cone_descriptor;
-    //     using difference_type = std::ptrdiff_t;
-    //     using pointer = Cone_descriptor *;
-    //     using reference = Cone_descriptor &;
-
-    //     Cone_iterator(index_t site_idx, site_iterator site_it, metric_face_iterator face_it,
-    //                   metric_face_iterator face_end)
-    //         : site_idx(site_idx), site_it(site_it), face_it(face_it), face_end(face_end) {}
-
-    //     value_type operator*() const { return {site_idx, *face_it}; }
-    // };
 
    public:
     SSM_restricted_voronoi_diagram(const Surface_mesh &mesh, Mesh_vertex_point_pmap vpm,
@@ -466,18 +419,6 @@ class SSM_restricted_voronoi_diagram {
     }
 
     T find_nearest_site(const Point_3 &p, Cone_descriptor &m_cone) const {
-        // build_tree();  // TODO: rebuild only when necessary
-        // Ray_3 ray(ORIGIN, p);
-        // std::vector<typename AABBTree::template Intersection_and_primitive_id<Ray_3>::Type> intersections;
-        // tree.all_intersections(ray, std::back_inserter(intersections));
-        // std::unordered_map<const MetricPolyhedron *, std::pair<FT, metric_face_descriptor>> m_weights;
-        // for (auto &[obj, m_face] : intersections) {
-        //     auto &[fd, m_ptr] = m_face;
-        //     auto isect_pt = boost::get<Point_3>(obj);
-        //     FT weight = 1.0 / (isect_pt - ORIGIN).squared_length();
-        //     m_weights[m_ptr] = std::make_pair(weight, fd);
-        // }
-
         T d_min = INF;
 
         for (index_t i = 0; i < sites.size(); ++i) {
@@ -509,15 +450,6 @@ class SSM_restricted_voronoi_diagram {
 
     Cone_descriptor trace_boundary(mesh_halfedge_descriptor bh, Cone_descriptor k0, bool same_side = true,
                                    bool opposite_side = true) {
-        // Cone_descriptor k0;
-        // auto [bhit, bhit_end] = halfedges_around_face(bhd, mesh);
-        // bool init = true;
-        // Loop over boundary halfedges
-        // auto bh = *h_it;
-        // if (init) {
-        //     find_nearest_site(get(vpm, source(bh, mesh)), k0);
-        //     init = false;
-        // }
         CGAL_precondition(k0.is_valid());
         auto b_line = Pline_3::segment(get(vpm, source(bh, mesh)), get(vpm, target(bh, mesh)));
         // vd.add_vertex(b_line.p_min(), Boundary_vertex_info{bh, k0});
@@ -739,15 +671,6 @@ class SSM_restricted_voronoi_diagram {
         auto [c, m] = site(k.site_idx);
         return {k.site_idx, m.face_index_map[k.face]};
     }
-
-    // void build_tree() {
-    //     tree.clear();
-    //     for (auto &metric : metrics) {
-    //         auto [fbegin, fend] = faces(metric.graph);
-    //         tree.insert(fbegin, fend, metric.graph);
-    //     }
-    //     tree.build();
-    // }
 
     template <class FaceGraph, class VPMap>
     static Plane_3 supporting_plane(typename boost::graph_traits<FaceGraph>::halfedge_descriptor hd, const FaceGraph &g,
