@@ -460,9 +460,17 @@ class SSM_restricted_voronoi_diagram {
         if (is_border(bh_opposite, mesh)) {
             opposite_side = false;
         }
+
+        Vector_3 b_normal(NULL_VECTOR);
         Plane_3 b_plane, b_plane_opposite;
-        if (same_side) b_plane = mesh_face_plane(bh);
-        if (opposite_side) b_plane_opposite = mesh_face_plane(bh_opposite);
+        if (same_side) {
+            b_plane = mesh_face_plane(bh);
+            b_normal = b_plane.orthogonal_vector();
+        }
+        if (opposite_side) {
+            b_plane_opposite = mesh_face_plane(bh_opposite);
+            b_normal += b_plane_opposite.orthogonal_vector();
+        }
 
         Cone_descriptor k_prev;
 
@@ -515,7 +523,7 @@ class SSM_restricted_voronoi_diagram {
                 if (auto vd_it = b_vert_map.find(bvid); vd_it != b_vert_map.cend()) {
                     v_vd = vd_it->second;
                 } else {
-                    v_vd = voronoi.add_vertex(pt_start, Boundary_bisector_info{bh, k0, k1_min});
+                    v_vd = voronoi.add_vertex(pt_start, Boundary_bisector_info{bh, k0, k1_min}, b_normal);
                     b_vert_map[bvid] = v_vd;
                 }
 
@@ -571,7 +579,7 @@ class SSM_restricted_voronoi_diagram {
                 if (!h_max) break;
 
                 // Otherwise switch to the next cone
-                auto v_vd = voronoi.add_vertex(b_segment.p_max(), Boundary_cone_info{bh, k0});
+                auto v_vd = voronoi.add_vertex(b_segment.p_max(), Boundary_cone_info{bh, k0}, b_normal);
                 if (add_edges && prev_vd != vd_graph_traits::null_vertex()) {
                     voronoi.connect(prev_vd, v_vd);
                 }
@@ -665,6 +673,7 @@ class SSM_restricted_voronoi_diagram {
     }
 
     void build() {
+        reset();
         trace_all_boundaries();
         bool stat;
         do {
