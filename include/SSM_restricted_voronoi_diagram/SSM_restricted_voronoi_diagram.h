@@ -1,7 +1,8 @@
-#pragma once
+#ifndef SSM_RESTRICTED_VORONOI_DIAGRAM_SSM_RESTRICTED_VORONOI_DIAGRAM_H
+#define SSM_RESTRICTED_VORONOI_DIAGRAM_SSM_RESTRICTED_VORONOI_DIAGRAM_H
 
-#include <ssmrvd/SSM_restricted_voronoi_diagram_traits.hpp>
-#include <ssmrvd/Parametric_line_3.hpp>
+#include <SSM_restricted_voronoi_diagram/SSM_restricted_voronoi_diagram_traits.h>
+#include <SSM_restricted_voronoi_diagram/Parametric_line_3.h>
 
 #include <CGAL/Default.h>
 #include <CGAL/Dynamic_property_map.h>
@@ -1083,3 +1084,5 @@ class SSM_restricted_voronoi_diagram {
 };
 }  // namespace SSM_restricted_voronoi_diagram
 }  // namespace CGAL
+
+#endif  // SSM_RESTRICTED_VORONOI_DIAGRAM_SSM_RESTRICTED_VORONOI_DIAGRAM_H

@@ -1,6 +1,7 @@
-#pragma once
+#ifndef SSM_RESTRICTED_VORONOI_DIAGRAM_SSM_RESTRICTED_VORONOI_DIAGRAM_TRAITS_H
+#define SSM_RESTRICTED_VORONOI_DIAGRAM_SSM_RESTRICTED_VORONOI_DIAGRAM_TRAITS_H
 
-#include <ssmrvd/Parametric_line_3.hpp>
+#include <SSM_restricted_voronoi_diagram/Parametric_line_3.h>
 
 #include <CGAL/AABB_face_graph_triangle_primitive.h>
 #include <CGAL/AABB_traits.h>
@@ -30,3 +31,5 @@ class SSM_restricted_voronoi_diagram_traits : public K {
                      AABB_tree<AABB_traits<Kernel, AABB_face_graph_triangle_primitive<Metric_polyhedron>>>>::type;
 };
 }  // namespace CGAL::SSM_restricted_voronoi_diagram
+
+#endif  // SSM_RESTRICTED_VORONOI_DIAGRAM_SSM_RESTRICTED_VORONOI_DIAGRAM_TRAITS_H

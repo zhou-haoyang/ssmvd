@@ -1,5 +1,5 @@
-#ifndef PARAMETRIC_LINE_3_HPP
-#define PARAMETRIC_LINE_3_HPP
+#ifndef SSM_RESTRICTED_VORONOI_DIAGRAM_PARAMETRIC_LINE_3_H
+#define SSM_RESTRICTED_VORONOI_DIAGRAM_PARAMETRIC_LINE_3_H
 
 #include <CGAL/Origin.h>
 
@@ -89,4 +89,4 @@ bool isect(const Parametric_line_3<K, T> &l0, const Parametric_line_3<K, T> &l1,
     return true;
 }
 }  // namespace CGAL
-#endif /* PARAMETRIC_LINE_3_HPP */
+#endif  // SSM_RESTRICTED_VORONOI_DIAGRAM_PARAMETRIC_LINE_3_H
