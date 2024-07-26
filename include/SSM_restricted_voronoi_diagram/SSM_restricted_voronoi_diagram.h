@@ -104,8 +104,6 @@ class SSM_restricted_voronoi_diagram {
         index_t metric_idx;
     };
 
-    using site_iterator = std::vector<Site>::iterator;
-
     struct Cone_index {
         index_t site_idx;
         size_t face_idx;
@@ -185,58 +183,6 @@ class SSM_restricted_voronoi_diagram {
         bool operator==(const Cone_descriptor &other) const { return site_idx == other.site_idx && face == other.face; }
 
         bool is_valid() const { return site_idx >= 0 && face != metric_graph_traits::null_face(); }
-    };
-
-    //    private:
-    struct Metric_data {
-        Metric_polyhedron graph;
-        Metric_vertex_point_pmap vpm;
-        Metric_face_index_pmap face_index_map;
-        Metric_AABB_tree tree;
-
-        Metric_data(Metric_polyhedron graph, Metric_vertex_point_pmap vpm, Metric_face_index_pmap fim)
-            : graph(std::move(graph)), vpm(std::move(vpm)), face_index_map(std::move(fim)) {
-            auto [fbegin, fend] = faces(this->graph);
-            tree.insert(fbegin, fend, this->graph);
-            tree.build();
-        }
-
-        auto cone_face_bases(metric_halfedge_descriptor hd) const {
-            auto v0 = get(vpm, source(hd, graph)) - ORIGIN;
-            auto v1 = get(vpm, target(hd, graph)) - ORIGIN;
-            return std::make_pair(v0, v1);
-        }
-
-        /**
-         * @brief Return the normal of the 2D cone face, pointing inward
-         *
-         * @param hd
-         * @return Vector_3
-         */
-        Vector_3 cone_face_orthogonal_vector(metric_halfedge_descriptor hd) const {
-            // TODO: cache the result
-            auto [v0, v1] = cone_face_bases(hd);
-            Vector_3 n = cross_product(v0, v1);
-            return n;
-        }
-
-        // bool isect(const Pline_3 &l) {
-        //     auto n = m.cone_face_orthogonal_vector(hd);
-        //     FT nd = scalar_product(n, l_inf.d);
-        //     if (is_zero(nd)) {
-        //         // TODO: handle the case that the line lies on the face
-        //         return false;
-        //     }
-
-        //     FT np = scalar_product(n, l_inf.p - ORIGIN);
-        //     FT ti = -np / nd;
-        //     Point_3 pi = l_inf(ti);
-        //     Vector_3 vi = pi - ORIGIN;
-        //     if (!(orientation(n, v0, vi) == POSITIVE && orientation(n, vi, v1) == POSITIVE)) {
-        //         // p_i is outside the 2D cone
-        //         continue;
-        //     }
-        // }
     };
 
     enum Vertex_type : std::size_t {
@@ -392,6 +338,58 @@ class SSM_restricted_voronoi_diagram {
         vd_vertex_descriptor v_vd;
     };
 
+   private:
+    struct Metric_data {
+        Metric_polyhedron graph;
+        Metric_vertex_point_pmap vpm;
+        Metric_face_index_pmap face_index_map;
+        Metric_AABB_tree tree;
+
+        Metric_data(Metric_polyhedron graph, Metric_vertex_point_pmap vpm, Metric_face_index_pmap fim)
+            : graph(std::move(graph)), vpm(std::move(vpm)), face_index_map(std::move(fim)) {
+            auto [fbegin, fend] = faces(this->graph);
+            tree.insert(fbegin, fend, this->graph);
+            tree.build();
+        }
+
+        auto cone_face_bases(metric_halfedge_descriptor hd) const {
+            auto v0 = get(vpm, source(hd, graph)) - ORIGIN;
+            auto v1 = get(vpm, target(hd, graph)) - ORIGIN;
+            return std::make_pair(v0, v1);
+        }
+
+        /**
+         * @brief Return the normal of the 2D cone face, pointing inward
+         *
+         * @param hd
+         * @return Vector_3
+         */
+        Vector_3 cone_face_orthogonal_vector(metric_halfedge_descriptor hd) const {
+            // TODO: cache the result
+            auto [v0, v1] = cone_face_bases(hd);
+            Vector_3 n = cross_product(v0, v1);
+            return n;
+        }
+
+        // bool isect(const Pline_3 &l) {
+        //     auto n = m.cone_face_orthogonal_vector(hd);
+        //     FT nd = scalar_product(n, l_inf.d);
+        //     if (is_zero(nd)) {
+        //         // TODO: handle the case that the line lies on the face
+        //         return false;
+        //     }
+
+        //     FT np = scalar_product(n, l_inf.p - ORIGIN);
+        //     FT ti = -np / nd;
+        //     Point_3 pi = l_inf(ti);
+        //     Vector_3 vi = pi - ORIGIN;
+        //     if (!(orientation(n, v0, vi) == POSITIVE && orientation(n, vi, v1) == POSITIVE)) {
+        //         // p_i is outside the 2D cone
+        //         continue;
+        //     }
+        // }
+    };
+
     // class Cone_iterator {
     //     index_t site_idx;
     //     site_iterator site_it;
@@ -434,6 +432,48 @@ class SSM_restricted_voronoi_diagram {
     void clear_sites() { sites.clear(); }
 
     void clear_metrics() { metrics.clear(); }
+
+    T find_nearest_site(const Point_3 &p, Cone_descriptor &m_cone) const {
+        // build_tree();  // TODO: rebuild only when necessary
+        // Ray_3 ray(ORIGIN, p);
+        // std::vector<typename AABBTree::template Intersection_and_primitive_id<Ray_3>::Type> intersections;
+        // tree.all_intersections(ray, std::back_inserter(intersections));
+        // std::unordered_map<const MetricPolyhedron *, std::pair<FT, metric_face_descriptor>> m_weights;
+        // for (auto &[obj, m_face] : intersections) {
+        //     auto &[fd, m_ptr] = m_face;
+        //     auto isect_pt = boost::get<Point_3>(obj);
+        //     FT weight = 1.0 / (isect_pt - ORIGIN).squared_length();
+        //     m_weights[m_ptr] = std::make_pair(weight, fd);
+        // }
+
+        T d_min = INF;
+
+        for (index_t i = 0; i < sites.size(); ++i) {
+            auto [c, m] = site(i);
+            Ray_3 ray(ORIGIN, p - c.point);
+            auto res = m.tree.any_intersection(ray);
+            if (!res) continue;
+
+            auto [obj, fd] = *res;
+            auto pm = boost::get<Point_3>(&obj);
+            if (!pm) continue;
+
+            FT weight = 1.0 / (*pm - ORIGIN).squared_length();
+
+            // auto it = m_weights.find(&metrics[m_idx].graph);
+            // if (it == m_weights.end()) {
+            //     continue;
+            // }
+            auto d = approximate_sqrt((p - c.point).squared_length() * weight);
+            if (d < d_min) {
+                d_min = d;
+                m_cone.site_idx = i;
+                m_cone.face = fd;
+            }
+        }
+        CGAL_assertion(d_min < INF);
+        return d_min;
+    }
 
     Cone_descriptor trace_boundary(mesh_halfedge_descriptor bh, Cone_descriptor k0, bool same_side = true,
                                    bool opposite_side = true) {
@@ -647,11 +687,9 @@ class SSM_restricted_voronoi_diagram {
 
     const Voronoi_diagram_data &voronoi_diagram() const { return vd; }
 
-    //    private:
+   private:
     std::vector<Site> sites;
-
     std::vector<Metric_data> metrics;
-    // AABBTree tree;
 
     const Surface_mesh &mesh;
     Mesh_vertex_point_pmap vpm;
@@ -688,48 +726,6 @@ class SSM_restricted_voronoi_diagram {
     //     }
     //     tree.build();
     // }
-
-    T find_nearest_site(const Point_3 &p, Cone_descriptor &m_cone) const {
-        // build_tree();  // TODO: rebuild only when necessary
-        // Ray_3 ray(ORIGIN, p);
-        // std::vector<typename AABBTree::template Intersection_and_primitive_id<Ray_3>::Type> intersections;
-        // tree.all_intersections(ray, std::back_inserter(intersections));
-        // std::unordered_map<const MetricPolyhedron *, std::pair<FT, metric_face_descriptor>> m_weights;
-        // for (auto &[obj, m_face] : intersections) {
-        //     auto &[fd, m_ptr] = m_face;
-        //     auto isect_pt = boost::get<Point_3>(obj);
-        //     FT weight = 1.0 / (isect_pt - ORIGIN).squared_length();
-        //     m_weights[m_ptr] = std::make_pair(weight, fd);
-        // }
-
-        T d_min = INF;
-
-        for (index_t i = 0; i < sites.size(); ++i) {
-            auto [c, m] = site(i);
-            Ray_3 ray(ORIGIN, p - c.point);
-            auto res = m.tree.any_intersection(ray);
-            if (!res) continue;
-
-            auto [obj, fd] = *res;
-            auto pm = boost::get<Point_3>(&obj);
-            if (!pm) continue;
-
-            FT weight = 1.0 / (*pm - ORIGIN).squared_length();
-
-            // auto it = m_weights.find(&metrics[m_idx].graph);
-            // if (it == m_weights.end()) {
-            //     continue;
-            // }
-            auto d = approximate_sqrt((p - c.point).squared_length() * weight);
-            if (d < d_min) {
-                d_min = d;
-                m_cone.site_idx = i;
-                m_cone.face = fd;
-            }
-        }
-        CGAL_assertion(d_min < INF);
-        return d_min;
-    }
 
     template <class FaceGraph, class VPMap>
     static Plane_3 supporting_plane(typename boost::graph_traits<FaceGraph>::halfedge_descriptor hd, const FaceGraph &g,
