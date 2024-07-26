@@ -3,6 +3,7 @@
 
 #include <SSM_restricted_voronoi_diagram/Parametric_line_3.h>
 
+#include <CGAL/AABB_tree.h>
 #include <CGAL/AABB_face_graph_triangle_primitive.h>
 #include <CGAL/AABB_traits.h>
 #include <CGAL/Default.h>

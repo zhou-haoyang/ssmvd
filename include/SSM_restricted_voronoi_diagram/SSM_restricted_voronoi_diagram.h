@@ -9,23 +9,18 @@
 #include <CGAL/Kernel/global_functions_3.h>
 #include <CGAL/Origin.h>
 
-#include <CGAL/AABB_tree.h>
-#include <CGAL/AABB_traits.h>
-#include <CGAL/AABB_face_graph_triangle_primitive.h>
-
-#include <CGAL/Polygon_mesh_processing/measure.h>
 #include <CGAL/boost/graph/graph_traits_HalfedgeDS_default.h>
 #include <CGAL/boost/graph/helpers.h>
 #include <CGAL/boost/graph/iterator.h>
 #include <CGAL/boost/graph/properties.h>
 
-#include <CGAL/boost/graph/properties_HalfedgeDS_default.h>
 #include <CGAL/config.h>
 #include <CGAL/enum.h>
 #include <CGAL/kernel_assertions.h>
 #include <CGAL/number_utils.h>
 #include <CGAL/number_utils_classes.h>
 
+#include <deque>
 #include <limits>
 #include <optional>
 #include <unordered_map>
