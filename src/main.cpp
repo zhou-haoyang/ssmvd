@@ -25,7 +25,7 @@
 
 #include <format>
 #include <istream>
-#include <ssmrvd.hpp>
+#include <SSM_restricted_voronoi_diagram.h>
 
 #include <Eigen/Dense>
 
@@ -300,10 +300,11 @@ class GVDApp : public App {
     };
 
     void update_sites() {
-        size_t n_sites = gvd.sites.size();
+        size_t n_sites = gvd.num_sites();
         Eigen::MatrixX3d site_pos(n_sites, 3);
         for (Index i = 0; i < n_sites; ++i) {
-            auto [p, idx] = gvd.sites[i];
+            auto [c, m] = gvd.site(i);
+            auto &p = c.point;
             site_pos.row(i) << p.x(), p.y(), p.z();
         }
 
@@ -327,7 +328,7 @@ class GVDApp : public App {
         file >> n_metrics;
 
         gvd.clear_metrics();
-        gvd.metrics.reserve(n_metrics);
+        gvd.reserve_metrics(n_metrics);
         for (size_t i = 0; i < n_metrics; ++i) {
             Metric_polyhedron P;
             file >> P;
@@ -338,6 +339,7 @@ class GVDApp : public App {
         size_t n_sites;
         file >> n_sites;
         gvd.clear_sites();
+        gvd.reserve_sites(n_sites);
         for (size_t i = 0; i < n_sites; ++i) {
             double x, y, z;
             Index site_idx;
@@ -637,7 +639,8 @@ class GVDApp : public App {
 
     void update_vd() {
         std::unordered_map<SM_vertex_descriptor, Index> v_map;
-        auto &vd = gvd.vd.graph;
+        auto &voronoi = gvd.voronoi_diagram();
+        auto &vd = voronoi.graph;
         Eigen::MatrixX3d V(vd.number_of_vertices(), 3);
         Index i = 0;
         std::vector<std::string> labels;
@@ -645,7 +648,7 @@ class GVDApp : public App {
             v_map[v] = i;
             auto p = vd.point(v);
             V.row(i) << p.x(), p.y(), p.z();
-            auto info = get(gvd.vd.vertex_info_map, v);
+            auto info = get(voronoi.vertex_info_map, v);
             if (auto d = std::get_if<Restricted_voronoi_diagram::Boundary_vertex_info>(&info)) {
                 labels.push_back(std::format("BV{}: {}", v.idx(), d->k.site_idx));
             } else if (auto d = std::get_if<Restricted_voronoi_diagram::Boundary_bisector_info>(&info)) {
@@ -708,11 +711,12 @@ class GVDApp : public App {
     }
 
     void update_trace() {
-        Eigen::MatrixX3d V(gvd.i_traces.size() * 2, 3);
-        Eigen::MatrixX2i E(gvd.i_traces.size(), 2);
+        Eigen::MatrixX3d V(gvd.num_i_traces() * 2, 3);
+        Eigen::MatrixX2i E(gvd.num_i_traces(), 2);
 
-        for (Index i = 0; i < gvd.i_traces.size(); ++i) {
-            auto &tr = gvd.i_traces[i];
+        auto it = gvd.i_trace_cbegin();
+        for (Index i = 0; i < gvd.num_i_traces(); ++i, ++it) {
+            auto &tr = *it;
             auto l = tr.bisect_line;
             l.t_min = std::max(l.t_min, 0.);
             l.t_max = std::min(l.t_max, 0.5);
