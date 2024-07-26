@@ -64,8 +64,8 @@ typedef CGAL::Seam_mesh<Surface_mesh, Seam_edge_pmap, Seam_vertex_pmap> Seam_mes
 typedef CGAL::Polyhedron_3<Kernel, CGAL::Polyhedron_items_with_id_3> Metric_polyhedron;
 typedef CGAL::Surface_mesh<Kernel::Point_3> Voronoi_diagram;
 namespace RVD = CGAL::SSM_restricted_voronoi_diagram;
-typedef RVD::SSM_restricted_voronoi_diagram<Kernel, Metric_polyhedron, Surface_mesh, Voronoi_diagram>
-    Restricted_voronoi_diagram;
+typedef RVD::SSM_restricted_voronoi_diagram_traits<Kernel, Surface_mesh, Metric_polyhedron, Voronoi_diagram> Traits;
+typedef RVD::SSM_restricted_voronoi_diagram<Traits> Restricted_voronoi_diagram;
 typedef Restricted_voronoi_diagram::Cone_descriptor Cone_descriptor;
 typedef boost::graph_traits<Seam_mesh> Graph_traits;
 // typedef Graph_traits::vertex_iterator vertex_iterator;
@@ -653,7 +653,7 @@ class GVDApp : public App {
             } else if (auto d = std::get_if<Restricted_voronoi_diagram::Boundary_cone_info>(&info)) {
                 labels.push_back(std::format("BC{}: {}", v.idx(), d->k.site_idx));
             } else if (auto d = std::get_if<Restricted_voronoi_diagram::Two_site_bisector_info>(&info)) {
-                labels.push_back(std::format("C{}: {} {}", v.idx(), d->k0.site_idx, d->k1.site_idx));
+                labels.push_back(std::format("C{}: {} {}", v.idx(), d->k0.site_idx, d->c1));
             } else if (auto d = std::get_if<Restricted_voronoi_diagram::Three_site_bisector_info>(&info)) {
                 labels.push_back(std::format("T{}: {} {} {}", v.idx(), d->k0.site_idx, d->k1.site_idx, d->k2.site_idx));
             }
