@@ -449,7 +449,8 @@ class SSM_restricted_voronoi_diagram {
     }
 
     auto trace_boundary(mesh_halfedge_descriptor bh, Cone_descriptor k0, vd_vertex_descriptor prev_vd,
-                        bool same_side = true, bool opposite_side = true, bool add_edges = false) {
+                        bool same_side = true, bool opposite_side = true, bool add_border_edges = false,
+                        bool add_cone_vertices = false) {
         CGAL_precondition(k0.is_valid());
         auto b_line = Pline_3::segment(get(vpm, source(bh, mesh)), get(vpm, target(bh, mesh)));
 
@@ -527,7 +528,7 @@ class SSM_restricted_voronoi_diagram {
                     b_vert_map[bvid] = v_vd;
                 }
 
-                if (add_edges && prev_vd != vd_graph_traits::null_vertex()) {
+                if (add_border_edges && prev_vd != vd_graph_traits::null_vertex()) {
                     voronoi.connect(prev_vd, v_vd);
                 }
                 prev_vd = v_vd;
@@ -579,11 +580,13 @@ class SSM_restricted_voronoi_diagram {
                 if (!h_max) break;
 
                 // Otherwise switch to the next cone
-                auto v_vd = voronoi.add_vertex(b_segment.p_max(), Boundary_cone_info{bh, k0}, b_normal);
-                if (add_edges && prev_vd != vd_graph_traits::null_vertex()) {
-                    voronoi.connect(prev_vd, v_vd);
+                if (add_cone_vertices) {
+                    auto v_vd = voronoi.add_vertex(b_segment.p_max(), Boundary_cone_info{bh, k0}, b_normal);
+                    if (add_border_edges && prev_vd != vd_graph_traits::null_vertex()) {
+                        voronoi.connect(prev_vd, v_vd);
+                    }
+                    prev_vd = v_vd;
                 }
-                prev_vd = v_vd;
 
                 k_prev = k0;
                 auto [c0, m0] = site(k0.site_idx);
@@ -595,7 +598,7 @@ class SSM_restricted_voronoi_diagram {
         return std::make_pair(k0, prev_vd);
     }
 
-    void trace_all_boundaries(mesh_vertex_descriptor vd) {
+    void trace_all_boundaries(mesh_vertex_descriptor vd, bool add_border_edges = true, bool add_cone_vertices = false) {
         Cone_descriptor k0;
         find_nearest_site(get(vpm, vd), k0);
 
@@ -621,23 +624,26 @@ class SSM_restricted_voronoi_diagram {
                 auto kb = k0;  // Current cone
                 vd_vertex_descriptor prev_vd = vd_graph_traits::null_vertex(), vd0;
                 do {
-                    auto v_vd = voronoi.add_vertex(get(vpm, source(bhd, mesh)), Boundary_vertex_info{hd, k0});
-                    if (prev_vd != vd_graph_traits::null_vertex()) {
-                        voronoi.connect(prev_vd, v_vd);
-                    } else {
-                        vd0 = v_vd;
+                    if (add_border_edges) {
+                        auto v_vd = voronoi.add_vertex(get(vpm, source(bhd, mesh)), Boundary_vertex_info{hd, k0});
+                        if (prev_vd != vd_graph_traits::null_vertex()) {
+                            voronoi.connect(prev_vd, v_vd);
+                        } else {
+                            vd0 = v_vd;
+                        }
+                        prev_vd = v_vd;
                     }
-                    prev_vd = v_vd;
 
-                    std::tie(kb, prev_vd) = trace_boundary(bhd, kb, prev_vd, false, true, true);
+                    std::tie(kb, prev_vd) =
+                        trace_boundary(bhd, kb, prev_vd, false, true, add_border_edges, add_cone_vertices);
                     put(edge_visited, edge(bhd, mesh), true);
                     bhd = next(bhd, mesh);
                 } while (bhd != hd);
-                voronoi.connect(prev_vd, vd0);
+                if (add_border_edges) voronoi.connect(prev_vd, vd0);
             } else if (is_border(opposite(hd, mesh), mesh)) {
                 continue;  // We handle the border halfedge in the previous case
             } else {
-                auto [k, prev_vd] = trace_boundary(hd, k0, vd_graph_traits::null_vertex(), true, true, false);
+                auto [k, _] = trace_boundary(hd, k0, vd_graph_traits::null_vertex(), true, true, false, false);
                 put(edge_visited, edge(hd, mesh), true);
                 for (auto hd_inner : halfedges_around_source(target(hd, mesh), mesh)) {
                     if (get(edge_visited, edge(hd_inner, mesh))) continue;
@@ -648,9 +654,9 @@ class SSM_restricted_voronoi_diagram {
         }
     }
 
-    void trace_all_boundaries() {
+    void trace_all_boundaries(bool add_border_edges = true, bool add_cone_vertices = false) {
         if (is_empty(mesh)) return;
-        trace_all_boundaries(*vertices(mesh).first);
+        trace_all_boundaries(*vertices(mesh).first, add_border_edges, add_cone_vertices);
     }
 
     void reload() { vpm = get(vertex_point, mesh); }
@@ -672,9 +678,9 @@ class SSM_restricted_voronoi_diagram {
         return true;
     }
 
-    void build() {
+    void build(bool add_border_edges = true, bool add_cone_vertices = false) {
         reset();
-        trace_all_boundaries();
+        trace_all_boundaries(add_border_edges, add_cone_vertices);
         bool stat;
         do {
             stat = step();
