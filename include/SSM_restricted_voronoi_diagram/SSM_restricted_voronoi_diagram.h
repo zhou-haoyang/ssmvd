@@ -178,7 +178,7 @@ class SSM_restricted_voronoi_diagram {
     enum Vertex_type : std::size_t {
         BOUNDARY,
         BOUNDARY_CONE,
-        BOUNDARY_BISCETOR,
+        BOUNDARY_BISECTOR,
         TWO_SITE_BISECTOR,
         THREE_SITE_BISECTOR,
     };
@@ -364,11 +364,13 @@ class SSM_restricted_voronoi_diagram {
 
    public:
     SSM_restricted_voronoi_diagram(const Surface_mesh &mesh, Mesh_vertex_point_pmap vpm,
-                                   Mesh_face_index_pmap face_index_map, Mesh_edge_index_pmap edge_index_map)
+                                   Mesh_face_index_pmap face_index_map, Mesh_edge_index_pmap edge_index_map,
+                                   Traits traits = Traits())
         : mesh(mesh),
           vpm(std::move(vpm)),
           face_index_map(std::move(face_index_map)),
-          edge_index_map(std::move(edge_index_map)) {}
+          edge_index_map(std::move(edge_index_map)),
+          traits(traits) {}
     SSM_restricted_voronoi_diagram(const Surface_mesh &mesh)
         : SSM_restricted_voronoi_diagram(mesh, get(vertex_point, mesh), get(face_index, mesh), get(edge_index, mesh)) {}
 
@@ -692,6 +694,7 @@ class SSM_restricted_voronoi_diagram {
     const Voronoi_diagram_data &voronoi_diagram() const { return voronoi; }
 
    private:
+    Traits traits;
     std::vector<Site> sites;
     std::vector<Metric_data> metrics;
 
