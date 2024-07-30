@@ -25,6 +25,7 @@
 #include <optional>
 #include <unordered_map>
 #include <vector>
+#include <iostream>
 
 namespace CGAL {
 namespace SSM_restricted_voronoi_diagram {
@@ -104,6 +105,12 @@ class SSM_restricted_voronoi_diagram {
         bool operator>(const Cone_index &other) const {
             return site_idx > other.site_idx || (site_idx == other.site_idx && face_idx > other.face_idx);
         }
+
+        // stream operator
+        friend std::ostream &operator<<(std::ostream &os, const Cone_index &ci) {
+            os << "Cone(S" << ci.site_idx << ", M" << ci.face_idx << ")";
+            return os;
+        }
     };
 
     struct Cone_index_hash {
@@ -153,6 +160,11 @@ class SSM_restricted_voronoi_diagram {
 
         bool operator==(const Boundary_vertex_id &other) const {
             return k0 == other.k0 && k1 == other.k1 && mesh_halfedge_idx == other.mesh_halfedge_idx;
+        }
+
+        friend std::ostream &operator<<(std::ostream &os, const Boundary_vertex_id &v) {
+            os << "Boundary(" << v.k0 << ", " << v.k1 << ", E" << v.mesh_halfedge_idx << ")";
+            return os;
         }
     };
 
@@ -533,6 +545,11 @@ class SSM_restricted_voronoi_diagram {
                     b_vert_map[bvid] = v_vd;
                 }
 
+                if (debug_output) {
+                    std::clog << "[b-trace] boundary 2-site bisector " << bvid << " intersects at point " << pt_start
+                              << std::endl;
+                }
+
                 if (add_border_edges && prev_vd != vd_graph_traits::null_vertex()) {
                     voronoi.connect(prev_vd, v_vd);
                 }
@@ -698,6 +715,7 @@ class SSM_restricted_voronoi_diagram {
 
    private:
     Traits traits;
+    bool debug_output = true;
     std::vector<Site> sites;
     std::vector<Metric_data> metrics;
 
