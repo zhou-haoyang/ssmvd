@@ -142,7 +142,7 @@ class Parametric_line_traits_3 {
             auto n = K().construct_orthogonal_vector_3_object()(plane);
             auto D = K().compute_d_3_object()(plane);
             auto nd = scalar_product(n, l.d());
-            auto np = scalar_product(n, K().construct_vector_3_object()(l.p(), ORIGIN)) + D;
+            auto np = scalar_product(n, K().construct_vector_3_object()(ORIGIN, l.p())) + D;
 
             if (is_zero(nd)) {
                 if (is_zero(np)) return INF;
