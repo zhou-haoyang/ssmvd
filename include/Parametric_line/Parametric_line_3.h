@@ -36,6 +36,10 @@ struct Parametric_line_3 {
 
     Parametric_line_3 opposite() const { return R().construct_opposite_parametric_line_3_object()(*this); }
 
+    Parametric_line_3 clipped(T t_min = -INF, T t_max = INF) const {
+        return R().construct_parametric_line_3_object()(*this, t_min, t_max);
+    }
+
     Point_3 p_min() const { return R().construct_pmin_3_object()(*this); }
 
     Point_3 p_max() const { return R().construct_pmax_3_object()(*this); }
@@ -84,14 +88,12 @@ class Parametric_line_traits_3 {
         Parametric_line_3 operator()(const Point_3 &p, const Vector_3 &d, T tmin = -INF, T tmax = INF) const {
             return Parametric_line_3(p, d, tmin, tmax);
         }
+
         Parametric_line_3 operator()(const Point_3 &p0, const Point_3 &p1) const {
             return Parametric_line_3(p0, p1 - p0, -INF, INF);
         }
-        Parametric_line_3 operator()(const Parametric_line_3 &pline, T tmin) const {
-            return Parametric_line_3(pline.p(), pline.d(), tmin, pline.t_max());
-        }
 
-        Parametric_line_3 operator()(const Parametric_line_3 &pline, T tmin, T tmax) const {
+        Parametric_line_3 operator()(const Parametric_line_3 &pline, T tmin = -INF, T tmax = INF) const {
             return Parametric_line_3(pline.p(), pline.d(), std::max(pline.t_min(), tmin),
                                      std::min(pline.t_max(), tmax));
         }

@@ -717,9 +717,7 @@ class GVDApp : public App {
         auto it = gvd.i_trace_cbegin();
         for (Index i = 0; i < gvd.num_i_traces(); ++i, ++it) {
             auto &tr = *it;
-            auto l = tr.bisect_line;
-            l.t_min = std::max(l.t_min, 0.);
-            l.t_max = std::min(l.t_max, 0.5);
+            auto l = tr.bisect_line.clipped(0, 0.5);
             V.row(i * 2) << l.p_min().x(), l.p_min().y(), l.p_min().z();
             V.row(i * 2 + 1) << l.p_max().x(), l.p_max().y(), l.p_max().z();
             E.row(i) << i * 2, i * 2 + 1;
