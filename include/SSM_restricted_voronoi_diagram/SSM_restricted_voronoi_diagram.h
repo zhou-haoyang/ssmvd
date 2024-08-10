@@ -502,7 +502,8 @@ class SSM_restricted_voronoi_diagram {
             b_normal += b_plane_opposite.orthogonal_vector();
         }
 
-        auto isects = find_all_segment_cone_intersections(b_line);
+        find_all_segment_cone_intersections(b_line, isects_vec_cache);
+        auto &isects = isects_vec_cache;
 
         // Sub-interval of the boundary segment that intersects k0
         auto isect_iter = isects[k0.site_idx].find_face(k0.face);
@@ -527,9 +528,9 @@ class SSM_restricted_voronoi_diagram {
                 }
 
                 auto isect = *isect_iter;
-                auto isects_overlap =
-                    isects[site_idx].clip(std::max(isect.second.t_min, t_min), std::min(isect.second.t_max, t_max));
-
+                isects[site_idx].clip(std::max(isect.second.t_min, t_min), std::min(isect.second.t_max, t_max),
+                                      isects_cache);
+                auto &isects_overlap = isects_cache;
                 for (auto [fd, isect_overlap] : isects_overlap) {
                     Cone_descriptor k1{site_idx, fd};
                     if (k1 == k_prev) continue;
@@ -754,6 +755,136 @@ class SSM_restricted_voronoi_diagram {
     const Voronoi_diagram_data &voronoi_diagram() const { return voronoi; }
 
    private:
+    struct Cone_line_intersection {
+        T t_min, t_max;
+        metric_halfedge_descriptor ed_min, ed_max;
+    };
+
+    struct Segment_cone_intersections;
+
+    class Segment_cone_intersections_iterator {
+       public:
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = typename Segment_cone_intersections::value_type;
+        using difference_type = std::ptrdiff_t;
+        using iterator = Segment_cone_intersections_iterator;
+
+        Segment_cone_intersections_iterator(Segment_cone_intersections *data, std::size_t idx) : data(data), idx(idx) {}
+
+        value_type operator*() const { return (*data)[idx]; }
+
+        iterator &operator++() {
+            ++idx;
+            return *this;
+        }
+
+        iterator operator++(int) {
+            iterator tmp = *this;
+            ++idx;
+            return tmp;
+        }
+
+        bool operator==(const iterator &other) const { return data == other.data && idx == other.idx; }
+
+       private:
+        Segment_cone_intersections *data = nullptr;
+        std::size_t idx;
+    };
+
+    struct Segment_cone_intersections {
+        using value_type = std::pair<metric_face_descriptor, Cone_line_intersection>;
+        using iterator = Segment_cone_intersections_iterator;
+
+        value_type operator[](std::size_t idx) const {
+            CGAL_assertion(idx < fds.size());
+            return std::make_pair(fds[idx], Cone_line_intersection{ts[idx], ts[idx + 1], eds[idx], eds[idx + 1]});
+        }
+
+        iterator begin() { return iterator(this, 0); }
+
+        iterator end() { return iterator(this, fds.size()); }
+
+        bool empty() const { return fds.empty(); }
+
+        std::size_t num_faces() const { return fds.size(); }
+
+        T t_min() const {
+            CGAL_assertion(!empty());
+            return ts.front();
+        }
+
+        T t_max() const {
+            CGAL_assertion(!empty());
+            return ts.back();
+        }
+
+        iterator find_face(metric_face_descriptor fd) {
+            auto it = idx_map.find(fd);
+            if (it == idx_map.end()) {
+                return end();
+            }
+
+            return iterator(this, it->second);
+        }
+
+        void clear() {
+            ts.clear();
+            eds.clear();
+            fds.clear();
+            idx_map.clear();
+        }
+
+        void add_face(metric_face_descriptor fd) {
+            idx_map[fd] = fds.size();
+            fds.push_back(fd);
+        }
+
+        void add_intersection(T t, metric_halfedge_descriptor ed) {
+            CGAL_assertion(empty() || t >= t_max());
+            ts.push_back(t);
+            eds.push_back(ed);
+        }
+
+        void clip(T tmin, T tmax, Segment_cone_intersections &res) const {
+            res.clear();
+
+            // Empty cases
+            if (empty() || tmin > tmax || tmin > t_max() || tmax < t_min()) return;
+
+            auto it0 = std::lower_bound(ts.begin(), ts.end(), tmin);
+            auto it1 = std::upper_bound(ts.begin(), ts.end(), tmax);
+
+            if (tmin < *it0) {
+                // tmin is in range of it0 - 1 and it0
+                res.ts.push_back(tmin);
+                res.eds.push_back(metric_graph_traits::null_halfedge());
+                auto i0 = std::distance(ts.begin(), it0);
+                CGAL_assertion(i0 > 0);
+                res.fds.push_back(fds[i0 - 1]);
+            }
+
+            for (auto it = it0; it != it1; ++it) {
+                res.ts.push_back(*it);
+                auto i = std::distance(ts.begin(), it);
+                res.eds.push_back(eds[i]);
+                if (*it < tmax) res.fds.push_back(fds[i]);
+            }
+
+            if (res.ts.empty() || tmax > res.ts.back()) {
+                // tmax is in range of it1 and it1 + 1
+                res.ts.push_back(tmax);
+                res.eds.push_back(metric_graph_traits::null_halfedge());
+            }
+        }
+
+       private:
+        std::vector<T> ts;                            // N+1
+        std::vector<metric_halfedge_descriptor> eds;  // N+1
+        std::vector<metric_face_descriptor> fds;      // N
+
+        mutable std::unordered_map<metric_face_descriptor, size_t> idx_map;
+    };
+
     Traits traits;
     bool debug_output = false;
     std::vector<Site> sites;
@@ -770,6 +901,9 @@ class SSM_restricted_voronoi_diagram {
     std::unordered_map<Internal_vertex_id, vd_vertex_descriptor, Internal_vertex_id_hash> vert_map;
 
     std::unordered_map<Boundary_vertex_id, vd_vertex_descriptor, Boundary_vertex_id_hash> b_vert_map;
+
+    Segment_cone_intersections isects_cache;
+    std::vector<Segment_cone_intersections> isects_vec_cache;
 
     Real_timer b_trace_timer, i_trace_timer;
 
@@ -934,132 +1068,8 @@ class SSM_restricted_voronoi_diagram {
     TRAIT_FUNC(FT, scalar_product, compute_scalar_product_3_object)
     TRAIT_FUNC(Orientation, orientation, orientation_3_object)
 
-    struct Cone_line_intersection {
-        T t_min, t_max;
-        metric_halfedge_descriptor ed_min, ed_max;
-    };
-
-    struct Segment_cone_intersections;
-
-    class Segment_cone_intersections_iterator {
-       public:
-        using iterator_category = std::forward_iterator_tag;
-        using value_type = typename Segment_cone_intersections::value_type;
-        using difference_type = std::ptrdiff_t;
-        using iterator = Segment_cone_intersections_iterator;
-
-        Segment_cone_intersections_iterator(Segment_cone_intersections *data, std::size_t idx) : data(data), idx(idx) {}
-
-        value_type operator*() const { return (*data)[idx]; }
-
-        iterator &operator++() {
-            ++idx;
-            return *this;
-        }
-
-        iterator operator++(int) {
-            iterator tmp = *this;
-            ++idx;
-            return tmp;
-        }
-
-        bool operator==(const iterator &other) const { return data == other.data && idx == other.idx; }
-
-       private:
-        Segment_cone_intersections *data = nullptr;
-        std::size_t idx;
-    };
-
-    struct Segment_cone_intersections {
-        using value_type = std::pair<metric_face_descriptor, Cone_line_intersection>;
-        using iterator = Segment_cone_intersections_iterator;
-
-        value_type operator[](std::size_t idx) const {
-            CGAL_assertion(idx < fds.size());
-            return std::make_pair(fds[idx], Cone_line_intersection{ts[idx], ts[idx + 1], eds[idx], eds[idx + 1]});
-        }
-
-        iterator begin() { return iterator(this, 0); }
-
-        iterator end() { return iterator(this, fds.size()); }
-
-        bool empty() const { return fds.empty(); }
-
-        std::size_t num_faces() const { return fds.size(); }
-
-        T t_min() const {
-            CGAL_assertion(!empty());
-            return ts.front();
-        }
-
-        T t_max() const {
-            CGAL_assertion(!empty());
-            return ts.back();
-        }
-
-        iterator find_face(metric_face_descriptor fd) {
-            auto it = idx_map.find(fd);
-            if (it == idx_map.end()) {
-                return end();
-            }
-
-            return iterator(this, it->second);
-        }
-
-        void add_face(metric_face_descriptor fd) {
-            idx_map[fd] = fds.size();
-            fds.push_back(fd);
-        }
-
-        void add_intersection(T t, metric_halfedge_descriptor ed) {
-            CGAL_assertion(empty() || t >= t_max());
-            ts.push_back(t);
-            eds.push_back(ed);
-        }
-
-        Segment_cone_intersections clip(T tmin, T tmax) const {
-            Segment_cone_intersections res;
-
-            // Empty cases
-            if (empty() || tmin > tmax || tmin > t_max() || tmax < t_min()) return res;
-
-            auto it0 = std::lower_bound(ts.begin(), ts.end(), tmin);
-            auto it1 = std::upper_bound(ts.begin(), ts.end(), tmax);
-
-            if (tmin < *it0) {
-                // tmin is in range of it0 - 1 and it0
-                res.ts.push_back(tmin);
-                res.eds.push_back(metric_graph_traits::null_halfedge());
-                auto i0 = std::distance(ts.begin(), it0);
-                CGAL_assertion(i0 > 0);
-                res.fds.push_back(fds[i0 - 1]);
-            }
-
-            for (auto it = it0; it != it1; ++it) {
-                res.ts.push_back(*it);
-                auto i = std::distance(ts.begin(), it);
-                res.eds.push_back(eds[i]);
-                if (*it < tmax) res.fds.push_back(fds[i]);
-            }
-
-            if (res.ts.empty() || tmax > res.ts.back()) {
-                // tmax is in range of it1 and it1 + 1
-                res.ts.push_back(tmax);
-                res.eds.push_back(metric_graph_traits::null_halfedge());
-            }
-
-            return res;
-        }
-
-       private:
-        std::vector<T> ts;                            // N+1
-        std::vector<metric_halfedge_descriptor> eds;  // N+1
-        std::vector<metric_face_descriptor> fds;      // N
-
-        mutable std::unordered_map<metric_face_descriptor, size_t> idx_map;
-    };
-
-    auto find_segment_cone_intersections(index_t site_idx, const Pline_3 &segment) const {
+    void find_segment_cone_intersections(index_t site_idx, const Pline_3 &segment,
+                                         Segment_cone_intersections &res) const {
         // CGAL_precondition(traits.is_segment_3_object()(segment));
         auto [c, m] = site(site_idx);
         auto pmin = traits.construct_pmin_3_object()(segment);
@@ -1083,7 +1093,7 @@ class SSM_restricted_voronoi_diagram {
         auto fd0 = *isect0;
         auto fd1 = *isect1;
 
-        Segment_cone_intersections res;
+        res.clear();
         res.add_intersection(tmin, metric_graph_traits::null_halfedge());
         res.add_face(fd0);
 
@@ -1134,25 +1144,24 @@ class SSM_restricted_voronoi_diagram {
             CGAL_assertion_msg(found, "No intersection found");
         }
         res.add_intersection(tmax, metric_graph_traits::null_halfedge());
-        return res;
     }
 
-    auto find_all_segment_cone_intersections(const Pline_3 &segment) const {
-        std::vector<Segment_cone_intersections> res;
+    void find_all_segment_cone_intersections(const Pline_3 &segment,
+                                             std::vector<Segment_cone_intersections> &res) const {
+        res.resize(sites.size());
         for (index_t site_idx = 0; site_idx < sites.size(); ++site_idx) {
-            res.push_back(find_segment_cone_intersections(site_idx, segment));
+            find_segment_cone_intersections(site_idx, segment, res[site_idx]);
         }
-        return res;
     }
 
-    static auto clip_all_segment_cone_intersections(const std::vector<Segment_cone_intersections> &isects, T tmin,
-                                                    T tmax) {
-        std::vector<Segment_cone_intersections> res;
-        res.reserve(isects.size());
-        std::transform(isects.begin(), isects.end(), std::back_inserter(res),
-                       [=](const Segment_cone_intersections &isects) { return isects.clip(tmin, tmax); });
-        return res;
-    }
+    // static auto clip_all_segment_cone_intersections(const std::vector<Segment_cone_intersections> &isects, T tmin,
+    //                                                 T tmax) {
+    //     std::vector<Segment_cone_intersections> res;
+    //     res.reserve(isects.size());
+    //     std::transform(isects.begin(), isects.end(), std::back_inserter(res),
+    //                    [=](const Segment_cone_intersections &isects) { return isects.clip(tmin, tmax); });
+    //     return res;
+    // }
 
     void process_i_trace(const Internal_trace &tr) {
         auto intersect_f = traits.intersect_3_object();
@@ -1201,7 +1210,8 @@ class SSM_restricted_voronoi_diagram {
                 continue;
             }
 
-            auto isects = find_segment_cone_intersections(site_idx, bi_ray);
+            find_segment_cone_intersections(site_idx, bi_ray, isects_cache);
+            auto &isects = isects_cache;
             auto [c, m] = site(site_idx);
             for (auto [fd, isect_overlap] : isects) {
                 Cone_descriptor k2{site_idx, fd};
