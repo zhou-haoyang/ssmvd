@@ -32,6 +32,7 @@ class SSM_restricted_voronoi_diagram_traits : public K, public Parametric_line_t
         Default::Get<MetricAABBTree,
                      AABB_tree<AABB_traits<Kernel, AABB_face_graph_triangle_primitive<Metric_polyhedron>>>>::type;
 
+    using Pline_traits::construct_point_3_object;
     using Pline_traits::construct_point_on_3_object;
     using Pline_traits::construct_vector_3_object;
     using Pline_traits::intersect_3_object;

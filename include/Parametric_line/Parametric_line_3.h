@@ -32,6 +32,10 @@ struct Parametric_line_3 {
 
     Point_3 operator()(FT t) const { return point(t); }
 
+    friend std::ostream &operator<<(std::ostream &os, const Parametric_line_3 &l) {
+        return os << "{(" << l.p() << ") + t(" << l.d() << "), " << l.t_min() << " <= t <= " << l.t_max() << "}";
+    }
+
     Point_3 point(FT t) const { return R().construct_point_on_3_object()(*this, t); }
 
     Parametric_line_3 opposite() const { return R().construct_opposite_parametric_line_3_object()(*this); }
@@ -105,15 +109,18 @@ class Parametric_line_traits_3 {
         }
     };
 
-    struct Construct_source_3 : public K::Construct_point_3 {
+    struct Construct_point_3 : public K::Construct_point_3 {
+        using K::Construct_point_3::operator();
         Point_3 operator()(const Parametric_line_3 &l) const { return l.p(); }
     };
 
     struct Construct_vector_3 : public K::Construct_vector_3 {
+        using K::Construct_vector_3::operator();
         Vector_3 operator()(const Parametric_line_3 &l) const { return l.d(); }
     };
 
     struct Construct_point_on_3 : public K::Construct_point_on_3 {
+        using K::Construct_point_on_3::operator();
         Point_3 operator()(const Parametric_line_3 &l, FT t) const { return l.p() + t * l.d(); }
     };
 
@@ -189,7 +196,7 @@ class Parametric_line_traits_3 {
 
     auto construct_opposite_parametric_line_3_object() const { return Construct_opposite_parametric_line_3(); }
 
-    auto construct_source_3_object() const { return Construct_source_3(); }
+    auto construct_point_3_object() const { return Construct_point_3(); }
 
     auto construct_vector_3_object() const { return Construct_vector_3(); }
 
