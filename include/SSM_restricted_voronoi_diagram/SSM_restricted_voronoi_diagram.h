@@ -1,6 +1,7 @@
 #ifndef SSM_RESTRICTED_VORONOI_DIAGRAM_SSM_RESTRICTED_VORONOI_DIAGRAM_H
 #define SSM_RESTRICTED_VORONOI_DIAGRAM_SSM_RESTRICTED_VORONOI_DIAGRAM_H
 
+#include <CGAL/basic.h>
 #include <SSM_restricted_voronoi_diagram/SSM_restricted_voronoi_diagram_traits.h>
 #include <Parametric_line/Parametric_line_3.h>
 
@@ -20,12 +21,19 @@
 #include <CGAL/number_utils.h>
 #include <CGAL/number_utils_classes.h>
 
+#include <algorithm>
 #include <deque>
 #include <limits>
 #include <optional>
 #include <unordered_map>
 #include <vector>
 #include <iostream>
+
+#define TRAIT_FUNC(ret_type, name, functor)                  \
+    template <class... T>                                    \
+    static ret_type name(T &&...args) {                      \
+        return Traits().functor()(std::forward<T>(args)...); \
+    }
 
 namespace CGAL {
 namespace SSM_restricted_voronoi_diagram {
@@ -60,6 +68,7 @@ class SSM_restricted_voronoi_diagram {
     using metric_face_iterator = metric_graph_traits::face_iterator;
     using metric_halfedge_descriptor = metric_graph_traits::halfedge_descriptor;
     using metric_halfedge_descriptor_opt = std::optional<metric_halfedge_descriptor>;
+    using metric_edge_descriptor = metric_graph_traits::edge_descriptor;
 
     using vd_graph_traits = typename boost::graph_traits<Voronoi_diagram_graph>;
     using vd_vertex_descriptor = vd_graph_traits::vertex_descriptor;
@@ -383,6 +392,7 @@ class SSM_restricted_voronoi_diagram {
           face_index_map(std::move(face_index_map)),
           edge_index_map(std::move(edge_index_map)),
           traits(traits) {}
+
     SSM_restricted_voronoi_diagram(const Surface_mesh &mesh)
         : SSM_restricted_voronoi_diagram(mesh, get(vertex_point, mesh), get(face_index, mesh), get(edge_index, mesh)) {}
 
@@ -490,14 +500,19 @@ class SSM_restricted_voronoi_diagram {
             b_normal += b_plane_opposite.orthogonal_vector();
         }
 
-        Cone_descriptor k_prev;
+        auto isects = find_all_segment_cone_intersections(b_line);
+
+        // Sub-interval of the boundary segment that intersects k0
+        auto isect_iter = isects[k0.site_idx].find_face(k0.face);
+        CGAL_assertion_msg(isect_iter != isects[k0.site_idx].end(), "Boundary must intersect the cone");
 
         // Find all boundary-cone / boundary-bisector intersections
+        Cone_descriptor k_prev;
+        T t_min = 0, t_max = 1;
         for (;;) {
-            Pline_3 b_segment;
-            metric_halfedge_descriptor_opt h_min, h_max;
-            auto res = isect(k0, b_line, b_segment, h_min, h_max);
-            CGAL_assertion_msg(res, "Boundary must intersect the cone");
+            // Pline_3 b_segment;
+            // metric_halfedge_descriptor_opt h_min, h_max;
+            // auto res = isect(k0, b_line, b_segment, h_min, h_max);
 
             // Find nearest intersection of 2-site bisector plane with the boundary segment
             T dist_min = INF;
@@ -509,19 +524,24 @@ class SSM_restricted_voronoi_diagram {
                     continue;
                 }
 
-                auto [c, m] = site(site_idx);
-                for (auto fd : faces(m.graph)) {
+                auto isect = *isect_iter;
+                auto isects_overlap =
+                    isects[site_idx].clip(std::max(isect.second.t_min, t_min), std::min(isect.second.t_max, t_max));
+
+                for (auto [fd, isect_overlap] : isects_overlap) {
                     Cone_descriptor k1{site_idx, fd};
                     if (k1 == k_prev) continue;
 
-                    Pline_3 b_overlap;
-                    if (!isect(k1, b_segment, b_overlap)) continue;
+                    // Pline_3 b_overlap;
+                    // if (!isect(k1, b_segment, b_overlap)) continue;
                     Plane_3 bi_plane = get_bisect_plane(k0, k1);
                     if (bi_plane.is_degenerate()) continue;
 
+                    auto b_overlap = construct_parametric_line(b_line, isect_overlap.t_min, isect_overlap.t_max);
+
                     auto tb = intersect_f(b_overlap, bi_plane);
                     if (!tb) continue;
-                    T dist = *tb - b_segment.t_min();
+                    T dist = *tb - t_min;
                     CGAL_assertion_msg(dist >= 0, "Intersection must be on the segment");
                     if (dist < dist_min) {
                         dist_min = dist;
@@ -536,7 +556,7 @@ class SSM_restricted_voronoi_diagram {
                 // A 2-site bisector intersects the boundary segment
                 // auto edge_hd = opposite(bh, mesh);
                 Boundary_vertex_id bvid(cone_index(k0), cone_index(k1_min), get(edge_index_map, edge(bh, mesh)));
-                auto pt_start = b_segment(tb_min);
+                auto pt_start = b_line(tb_min);
                 vd_vertex_descriptor v_vd;
                 if (auto vd_it = b_vert_map.find(bvid); vd_it != b_vert_map.cend()) {
                     v_vd = vd_it->second;
@@ -594,16 +614,22 @@ class SSM_restricted_voronoi_diagram {
                 // auto ori = orientation(b_plane.orthogonal_vector(), bi_dir, b_line.d);
                 // auto bisect = Pline_3::ray(b_segment(tb_min), ori == POSITIVE ? bi_dir : -bi_dir);
 
-                b_line = pline_f(b_line, tb_min);
+                // Switch current cone to new cone k1
+                t_min = tb_min;
                 k_prev = k0;
                 k0 = k1_min;
+
+                isect_iter = isects[k0.site_idx].find_face(k0.face);
+                CGAL_assertion_msg(isect_iter != isects[k0.site_idx].end(), "Boundary must intersect the cone");
             } else {
                 // The bondary segment does not intersect leave the cone. Switch to the next boundary segment
-                if (!h_max) break;
+                isect_iter++;
+                if (isect_iter == isects[k0.site_idx].end()) break;
 
                 // Otherwise switch to the next cone
+                auto isect = *isect_iter;
                 if (add_cone_vertices) {
-                    auto v_vd = voronoi.add_vertex(b_segment.p_max(), Boundary_cone_info{bh, k0}, b_normal);
+                    auto v_vd = voronoi.add_vertex(b_line(isect.second.t_min), Boundary_cone_info{bh, k0}, b_normal);
                     if (add_border_edges && prev_vd != vd_graph_traits::null_vertex()) {
                         voronoi.connect(prev_vd, v_vd);
                     }
@@ -611,9 +637,11 @@ class SSM_restricted_voronoi_diagram {
                 }
 
                 k_prev = k0;
-                auto [c0, m0] = site(k0.site_idx);
-                k0.face = face(opposite(*h_max, m0.graph), m0.graph);
-                b_line = pline_f(b_line, b_segment.t_max());
+                // auto [c0, m0] = site(k0.site_idx);
+                k0.face = isect.first;
+                t_min = isect.second.t_min;
+
+                // b_line = pline_f(b_line, b_segment.t_max());
                 // if (b_line.is_point()) break;
             }
         }
@@ -882,6 +910,234 @@ class SSM_restricted_voronoi_diagram {
         h_min = k_min == 0 ? h0_min : h1_min;
         h_max = k_max == 0 ? h0_max : h1_max;
         return t_min < t_max;
+    }
+
+    TRAIT_FUNC(Ray_3, construct_ray, construct_ray_3_object)
+    TRAIT_FUNC(Point_3, construct_point, construct_point_3_object)
+    TRAIT_FUNC(Point_3, construct_point_on, construct_point_on_3_object)
+    TRAIT_FUNC(Vector_3, construct_vector, construct_vector_3_object)
+    TRAIT_FUNC(Pline_3, construct_parametric_line, construct_parametric_line_3_object)
+    TRAIT_FUNC(FT, scalar_product, compute_scalar_product_3_object)
+    TRAIT_FUNC(Orientation, orientation, orientation_3_object)
+
+    struct Cone_line_intersection {
+        T t_min, t_max;
+        metric_halfedge_descriptor ed_min, ed_max;
+    };
+
+    struct Segment_cone_intersections;
+
+    class Segment_cone_intersections_iterator {
+       public:
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = typename Segment_cone_intersections::value_type;
+        using difference_type = std::ptrdiff_t;
+        using iterator = Segment_cone_intersections_iterator;
+
+        Segment_cone_intersections_iterator(Segment_cone_intersections *data, std::size_t idx) : data(data), idx(idx) {}
+
+        value_type operator*() const { return (*data)[idx]; }
+
+        iterator &operator++() {
+            ++idx;
+            return *this;
+        }
+
+        iterator operator++(int) {
+            iterator tmp = *this;
+            ++idx;
+            return tmp;
+        }
+
+        bool operator==(const iterator &other) const { return data == other.data && idx == other.idx; }
+
+       private:
+        Segment_cone_intersections *data = nullptr;
+        std::size_t idx;
+    };
+
+    struct Segment_cone_intersections {
+        using value_type = std::pair<metric_face_descriptor, Cone_line_intersection>;
+        using iterator = Segment_cone_intersections_iterator;
+
+        value_type operator[](std::size_t idx) const {
+            CGAL_assertion(idx < fds.size());
+            return std::make_pair(fds[idx], Cone_line_intersection{ts[idx], ts[idx + 1], eds[idx], eds[idx + 1]});
+        }
+
+        iterator begin() { return iterator(this, 0); }
+
+        iterator end() { return iterator(this, fds.size()); }
+
+        bool empty() const { return fds.empty(); }
+
+        std::size_t num_faces() const { return fds.size(); }
+
+        T t_min() const {
+            CGAL_assertion(!empty());
+            return ts.front();
+        }
+
+        T t_max() const {
+            CGAL_assertion(!empty());
+            return ts.back();
+        }
+
+        iterator find_face(metric_face_descriptor fd) {
+            auto it = idx_map.find(fd);
+            if (it == idx_map.end()) {
+                return end();
+            }
+
+            return iterator(this, it->second);
+        }
+
+        void add_face(metric_face_descriptor fd) {
+            idx_map[fd] = fds.size();
+            fds.push_back(fd);
+        }
+
+        void add_intersection(T t, metric_halfedge_descriptor ed) {
+            CGAL_assertion(empty() || t >= t_max());
+            ts.push_back(t);
+            eds.push_back(ed);
+        }
+
+        Segment_cone_intersections clip(T tmin, T tmax) const {
+            Segment_cone_intersections res;
+
+            // Empty cases
+            if (empty() || tmin > tmax || tmin > t_max() || tmax < t_min()) return res;
+
+            auto it0 = std::lower_bound(ts.begin(), ts.end(), tmin);
+            auto it1 = std::upper_bound(ts.begin(), ts.end(), tmax);
+
+            if (tmin < *it0) {
+                // tmin is in range of it0 - 1 and it0
+                res.ts.push_back(tmin);
+                res.eds.push_back(metric_graph_traits::null_halfedge());
+                auto i0 = std::distance(ts.begin(), it0);
+                CGAL_assertion(i0 > 0);
+                res.fds.push_back(fds[i0 - 1]);
+            }
+
+            for (auto it = it0; it != it1; ++it) {
+                res.ts.push_back(*it);
+                auto i = std::distance(ts.begin(), it);
+                res.eds.push_back(eds[i]);
+                if (*it < tmax) res.fds.push_back(fds[i]);
+            }
+
+            if (res.ts.empty() || tmax > res.ts.back()) {
+                // tmax is in range of it1 and it1 + 1
+                res.ts.push_back(tmax);
+                res.eds.push_back(metric_graph_traits::null_halfedge());
+            }
+
+            return res;
+        }
+
+       private:
+        std::vector<T> ts;                            // N+1
+        std::vector<metric_halfedge_descriptor> eds;  // N+1
+        std::vector<metric_face_descriptor> fds;      // N
+
+        mutable std::unordered_map<metric_face_descriptor, size_t> idx_map;
+    };
+
+    auto find_segment_cone_intersections(index_t site_idx, const Pline_3 &segment) const {
+        // CGAL_precondition(traits.is_segment_3_object()(segment));
+        auto [c, m] = site(site_idx);
+        auto pmin = traits.construct_pmin_3_object()(segment);
+        auto pmax = traits.construct_pmax_3_object()(segment);
+        auto tmin = traits.compute_tmin_3_object()(segment);
+        auto tmax = traits.compute_tmax_3_object()(segment);
+        auto p = construct_vector(c.point, construct_point(segment));
+        auto d = construct_vector(segment);
+
+        if (debug_output) {
+            std::clog << __func__ << ": site=" << c.point << ", segment=" << segment << std::endl;
+        }
+
+        auto ray0 = construct_ray(ORIGIN, construct_vector(c.point, pmin));
+        auto ray1 = construct_ray(ORIGIN, construct_vector(c.point, pmax));
+
+        auto isect0 = m.tree.any_intersected_primitive(ray0);
+        auto isect1 = m.tree.any_intersected_primitive(ray1);
+
+        CGAL_assertion(isect0 && isect1);
+        auto fd0 = *isect0;
+        auto fd1 = *isect1;
+
+        Segment_cone_intersections res;
+        res.add_intersection(tmin, metric_graph_traits::null_halfedge());
+        res.add_face(fd0);
+
+        metric_halfedge_descriptor hd_prev;
+        for (auto fd = fd0; fd != fd1;) {
+            bool found = false;
+            auto hd0 = halfedge(fd, m.graph);
+            for (auto hd : halfedges_around_face(hd0, m.graph)) {
+                if (hd == hd_prev) continue;
+                auto [v0, v1] = m.cone_face_bases(hd);
+                auto n = m.cone_face_orthogonal_vector(hd);
+
+                if (debug_output) {
+                    std::clog << __func__ << ": test segment-cone face intersection: v0=" << v0 << ", v1=" << v1
+                              << ", n=" << n << std::endl;
+                }
+
+                FT nd = scalar_product(n, d);
+                if (is_zero(nd)) {
+                    // TODO: handle the case that the line lies on the face
+                    continue;
+                }
+
+                FT np = scalar_product(n, p);
+                FT ti = -np / nd;
+                if (ti < tmin || ti > tmax) continue;
+
+                Vector_3 vi = p + ti * d;
+
+                if (!(orientation(n, v0, vi) == POSITIVE && orientation(n, vi, v1) == POSITIVE)) {
+                    // p_i is outside the 2D cone
+                    continue;
+                }
+
+                // The segment leaves the cone from edge hd
+                hd_prev = opposite(hd, m.graph);
+                fd = face(hd_prev, m.graph);
+
+                // res.ts.push_back(ti);
+                // res.eds.push_back(hd);
+                // res.fds.push_back(fd);
+
+                res.add_face(fd);
+                res.add_intersection(ti, hd);
+                found = true;
+                break;
+            }
+            CGAL_assertion_msg(found, "No intersection found");
+        }
+        res.add_intersection(tmax, metric_graph_traits::null_halfedge());
+        return res;
+    }
+
+    auto find_all_segment_cone_intersections(const Pline_3 &segment) const {
+        std::vector<Segment_cone_intersections> res;
+        for (index_t site_idx = 0; site_idx < sites.size(); ++site_idx) {
+            res.push_back(find_segment_cone_intersections(site_idx, segment));
+        }
+        return res;
+    }
+
+    static auto clip_all_segment_cone_intersections(const std::vector<Segment_cone_intersections> &isects, T tmin,
+                                                    T tmax) {
+        std::vector<Segment_cone_intersections> res;
+        res.reserve(isects.size());
+        std::transform(isects.begin(), isects.end(), std::back_inserter(res),
+                       [=](const Segment_cone_intersections &isects) { return isects.clip(tmin, tmax); });
+        return res;
     }
 
     void process_i_trace(const Internal_trace &tr) {
