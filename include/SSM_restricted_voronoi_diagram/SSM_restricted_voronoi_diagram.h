@@ -9,6 +9,7 @@
 #include <CGAL/Dynamic_property_map.h>
 #include <CGAL/Kernel/global_functions_3.h>
 #include <CGAL/Origin.h>
+#include <CGAL/Real_timer.h>
 
 #include <CGAL/boost/graph/graph_traits_HalfedgeDS_default.h>
 #include <CGAL/boost/graph/helpers.h>
@@ -475,6 +476,7 @@ class SSM_restricted_voronoi_diagram {
     auto trace_boundary(mesh_halfedge_descriptor bh, Cone_descriptor k0, vd_vertex_descriptor prev_vd,
                         bool same_side = true, bool opposite_side = true, bool add_border_edges = false,
                         bool add_cone_vertices = false) {
+        b_trace_timer.start();
         auto intersect_f = traits.intersect_3_object();
         auto pline_f = traits.construct_parametric_line_3_object();
 
@@ -645,6 +647,7 @@ class SSM_restricted_voronoi_diagram {
                 // if (b_line.is_point()) break;
             }
         }
+        b_trace_timer.stop();
         return std::make_pair(k0, prev_vd);
     }
 
@@ -716,6 +719,9 @@ class SSM_restricted_voronoi_diagram {
         i_traces.clear();
         vert_map.clear();
         b_vert_map.clear();
+
+        b_trace_timer.reset();
+        i_trace_timer.reset();
     }
 
     bool step() {
@@ -724,7 +730,9 @@ class SSM_restricted_voronoi_diagram {
         }
         auto tr = std::move(i_traces.front());
         i_traces.pop_front();
+        i_trace_timer.start();
         process_i_trace(tr);
+        i_trace_timer.stop();
         return true;
     }
 
@@ -736,6 +744,10 @@ class SSM_restricted_voronoi_diagram {
             stat = step();
         } while (stat);
         voronoi.trace_faces();
+        std::clog << "Boundary trace: count = " << b_trace_timer.intervals() << ", time = " << b_trace_timer.time()
+                  << "s, speed = " << b_trace_timer.time() / b_trace_timer.intervals() << "s/trace" << std::endl;
+        std::clog << "Internal trace: count = " << i_trace_timer.intervals() << ", time = " << i_trace_timer.time()
+                  << "s, speed = " << i_trace_timer.time() / i_trace_timer.intervals() << "s/trace" << std::endl;
         CGAL_postcondition(is_valid_face_graph(voronoi.graph, true));
     }
 
@@ -758,6 +770,8 @@ class SSM_restricted_voronoi_diagram {
     std::unordered_map<Internal_vertex_id, vd_vertex_descriptor, Internal_vertex_id_hash> vert_map;
 
     std::unordered_map<Boundary_vertex_id, vd_vertex_descriptor, Boundary_vertex_id_hash> b_vert_map;
+
+    Real_timer b_trace_timer, i_trace_timer;
 
     Cone_index cone_index(const Cone_descriptor &k) const {
         auto [c, m] = site(k.site_idx);
