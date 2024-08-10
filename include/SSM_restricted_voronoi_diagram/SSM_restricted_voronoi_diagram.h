@@ -743,7 +743,7 @@ class SSM_restricted_voronoi_diagram {
 
    private:
     Traits traits;
-    bool debug_output = true;
+    bool debug_output = false;
     std::vector<Site> sites;
     std::vector<Metric_data> metrics;
 
@@ -1187,16 +1187,19 @@ class SSM_restricted_voronoi_diagram {
                 continue;
             }
 
+            auto isects = find_segment_cone_intersections(site_idx, bi_ray);
             auto [c, m] = site(site_idx);
-            for (auto fd : faces(m.graph)) {
+            for (auto [fd, isect_overlap] : isects) {
                 Cone_descriptor k2{site_idx, fd};
                 if (k2 == tr.k_prev) continue;
 
-                Pline_3 s_overlap;
-                if (!isect(k2, bi_ray, s_overlap)) continue;
+                // Pline_3 s_overlap;
+                // if (!isect(k2, bi_ray, s_overlap)) continue;
 
                 Plane_3 bi_plane = get_bisect_plane(tr.k0, k2);
                 if (bi_plane.is_degenerate()) continue;
+
+                auto s_overlap = construct_parametric_line(bi_ray, isect_overlap.t_min, isect_overlap.t_max);
 
                 // T tb;
                 auto tb = intersect_f(s_overlap, bi_plane);
