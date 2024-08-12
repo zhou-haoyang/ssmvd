@@ -55,7 +55,7 @@ class SSM_restricted_voronoi_diagram {
     using Surface_mesh = Traits::Surface_mesh;
     using Metric_polyhedron = Traits::Metric_polyhedron;
     using Voronoi_diagram_graph = Traits::Voronoi_diagram;
-    using Metric_AABB_tree = Traits::Metric_AABB_tree;
+    using Metric_traits_data = Traits::Metric_traits_data;
 
     using index_t = std::ptrdiff_t;
 
@@ -355,14 +355,13 @@ class SSM_restricted_voronoi_diagram {
         Metric_polyhedron graph;
         Metric_vertex_point_pmap vpm;
         Metric_face_index_pmap face_index_map;
-        Metric_AABB_tree tree;
+        Metric_traits_data data;
 
         Metric_data(Metric_polyhedron graph, Metric_vertex_point_pmap vpm, Metric_face_index_pmap fim)
-            : graph(std::move(graph)), vpm(std::move(vpm)), face_index_map(std::move(fim)) {
-            auto [fbegin, fend] = faces(this->graph);
-            tree.insert(fbegin, fend, this->graph);
-            tree.build();
-        }
+            : graph(std::move(graph)),
+              vpm(std::move(vpm)),
+              face_index_map(std::move(fim)),
+              data(construct_metric_traits_data(this->graph)) {}
 
         auto cone_face_bases(metric_halfedge_descriptor hd) const {
             auto v0 = get(vpm, source(hd, graph)) - ORIGIN;
@@ -448,15 +447,12 @@ class SSM_restricted_voronoi_diagram {
 
         for (index_t i = 0; i < sites.size(); ++i) {
             auto [c, m] = site(i);
-            Ray_3 ray(ORIGIN, p - c.point);
-            auto res = m.tree.any_intersection(ray);
+
+            auto res = metric_any_intersection(m.data, p - c.point);
             if (!res) continue;
+            auto [pm, fd] = *res;
 
-            auto [obj, fd] = *res;
-            auto pm = boost::get<Point_3>(&obj);
-            if (!pm) continue;
-
-            FT weight = 1.0 / (*pm - ORIGIN).squared_length();
+            FT weight = 1.0 / (pm - ORIGIN).squared_length();
 
             // auto it = m_weights.find(&metrics[m_idx].graph);
             // if (it == m_weights.end()) {
@@ -1067,6 +1063,9 @@ class SSM_restricted_voronoi_diagram {
     TRAIT_FUNC(Pline_3, construct_parametric_line, construct_parametric_line_3_object)
     TRAIT_FUNC(FT, scalar_product, compute_scalar_product_3_object)
     TRAIT_FUNC(Orientation, orientation, orientation_3_object)
+    TRAIT_FUNC(Metric_traits_data, construct_metric_traits_data, construct_metric_data_object)
+    TRAIT_FUNC(auto, metric_any_intersection, metric_any_intersection_object)
+    TRAIT_FUNC(auto, metric_any_intersected_face, metric_any_intersected_face_object)
 
     void find_segment_cone_intersections(index_t site_idx, const Pline_3 &segment,
                                          Segment_cone_intersections &res) const {
@@ -1083,11 +1082,8 @@ class SSM_restricted_voronoi_diagram {
             std::clog << __func__ << ": site=" << c.point << ", segment=" << segment << std::endl;
         }
 
-        auto ray0 = construct_ray(ORIGIN, construct_vector(c.point, pmin));
-        auto ray1 = construct_ray(ORIGIN, construct_vector(c.point, pmax));
-
-        auto isect0 = m.tree.any_intersected_primitive(ray0);
-        auto isect1 = m.tree.any_intersected_primitive(ray1);
+        auto isect0 = metric_any_intersected_face(m.data, construct_vector(c.point, pmin));
+        auto isect1 = metric_any_intersected_face(m.data, construct_vector(c.point, pmax));
 
         CGAL_assertion(isect0 && isect1);
         auto fd0 = *isect0;

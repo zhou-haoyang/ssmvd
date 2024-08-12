@@ -2,15 +2,11 @@
 #define SSM_RESTRICTED_VORONOI_DIAGRAM_SSM_RESTRICTED_VORONOI_DIAGRAM_TRAITS_H
 
 #include <Parametric_line/Parametric_line_3.h>
-
-#include <CGAL/AABB_tree.h>
-#include <CGAL/AABB_face_graph_triangle_primitive.h>
-#include <CGAL/AABB_traits.h>
 #include <CGAL/Default.h>
 
 namespace CGAL::SSM_restricted_voronoi_diagram {
-template <class K, class SurfaceMesh, class MetricPolyhedron, class VoronoiDiagram, class MetricAABBTree = Default>
-class SSM_restricted_voronoi_diagram_traits : public K, public Parametric_line_traits_3<K> {
+template <class K, class SurfaceMesh, class MetricPolyhedron, class VoronoiDiagram, class MetricTraits>
+class SSM_restricted_voronoi_diagram_traits : public K, public Parametric_line_traits_3<K>, public MetricTraits {
    public:
     using Kernel = K;
     using FT = Kernel::FT;
@@ -28,14 +24,17 @@ class SSM_restricted_voronoi_diagram_traits : public K, public Parametric_line_t
     using Metric_polyhedron = MetricPolyhedron;
     using Voronoi_diagram = VoronoiDiagram;
 
-    using Metric_AABB_tree =
-        Default::Get<MetricAABBTree,
-                     AABB_tree<AABB_traits<Kernel, AABB_face_graph_triangle_primitive<Metric_polyhedron>>>>::type;
+    using Metric_traits = MetricTraits;
+    using Metric_traits_data = typename Metric_traits::Data;
 
     using Pline_traits::construct_point_3_object;
     using Pline_traits::construct_point_on_3_object;
     using Pline_traits::construct_vector_3_object;
     using Pline_traits::intersect_3_object;
+
+    using MetricTraits::construct_metric_data_object;
+    using MetricTraits::metric_any_intersected_face_object;
+    using MetricTraits::metric_any_intersection_object;
 };
 }  // namespace CGAL::SSM_restricted_voronoi_diagram
 
