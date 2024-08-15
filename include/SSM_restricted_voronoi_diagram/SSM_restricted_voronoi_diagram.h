@@ -670,7 +670,9 @@ class SSM_restricted_voronoi_diagram {
                 vd_vertex_descriptor prev_vd = vd_graph_traits::null_vertex(), vd0;
                 do {
                     if (add_border_edges) {
-                        auto v_vd = voronoi->add_vertex(get(vpm, source(bhd, mesh)), Boundary_vertex_info{hd, k0});
+                        auto b_plane = mesh_face_plane(opposite(bhd, mesh));
+                        auto v_vd = voronoi->add_vertex(get(vpm, source(bhd, mesh)), Boundary_vertex_info{hd, k0},
+                                                        b_plane.orthogonal_vector());
                         if (prev_vd != vd_graph_traits::null_vertex()) {
                             voronoi->connect(prev_vd, v_vd, vd_graph_traits::null_face(), dummy_face);
                         } else {
@@ -1412,7 +1414,8 @@ class SSM_restricted_voronoi_diagram {
             }
             auto bisect_line = Pline_3::ray(bi_ray.p_max(), bisect_dir);
             auto v_vd = voronoi->add_vertex(
-                bi_ray.p_max(), Two_site_bisector_info{tr.face_hd, k0_next, k1_next.site_idx, cone_isect->hd});
+                bi_ray.p_max(), Two_site_bisector_info{tr.face_hd, k0_next, k1_next.site_idx, cone_isect->hd},
+                tr.face_plane.orthogonal_vector());
             voronoi->connect(tr.v_vd, v_vd, dummy_face, dummy_face);
             vert_map[vid] = v_vd;
             // auto v_hd = vd.add_loop(v_vd);
@@ -1443,7 +1446,8 @@ class SSM_restricted_voronoi_diagram {
             auto bisect_dir = cross_product(tr.bisect_plane.orthogonal_vector(), b_plane.orthogonal_vector());
             auto orient = orientation(b_plane.orthogonal_vector(), bisect_dir, edge.d());
             auto bisect_line = Pline_3::ray(bi_ray.p_max(), orient == POSITIVE ? bisect_dir : -bisect_dir);
-            auto v_vd = voronoi->add_vertex(bi_ray.p_max(), Boundary_bisector_info{tr.face_hd, tr.k0, tr.k1});
+            auto v_vd = voronoi->add_vertex(bi_ray.p_max(), Boundary_bisector_info{tr.face_hd, tr.k0, tr.k1},
+                                            tr.face_plane.orthogonal_vector() + b_plane.orthogonal_vector());
             voronoi->connect(tr.v_vd, v_vd, dummy_face, dummy_face);
             b_vert_map[bvid] = v_vd;
             // auto v_hd = vd.add_loop(v_vd);
