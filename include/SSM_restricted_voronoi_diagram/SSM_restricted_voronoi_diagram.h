@@ -275,6 +275,12 @@ class SSM_restricted_voronoi_diagram {
             std::cerr.flush();
         }
 
+        static Vector_3 normalized(const Vector_3 &v) {
+            auto n = v.squared_length();
+            if (is_zero(n)) return v;
+            return v / approximate_sqrt(n);
+        }
+
         void insert_halfedge_loop(vd_halfedge_descriptor hd) {
             auto vt = target(hd, graph), vs = source(hd, graph);
             auto hd_cur = halfedge(vt, graph);
@@ -283,24 +289,34 @@ class SSM_restricted_voronoi_diagram {
                 return;
             }
 
-            auto pt = get(vpm, vt), ps = get(vpm, vs);
-            auto v = ps - pt;
-            auto n = get(vertex_normal_map, vt);
-
             if (hd_cur != opposite(next(hd_cur, graph), graph)) {
-                auto ori_cur = orientation(n, v, get(vpm, source(hd_cur, graph)) - pt);
-                bool found = false;
-                do {
+                // At least 2 halfedges around the target vertex
+                auto pt = get(vpm, vt), ps = get(vpm, vs);
+                auto v = ps - pt;
+                auto n = normalized(get(vertex_normal_map, vt));
+
+                auto v_cur = normalized(get(vpm, source(hd_cur, graph)) - pt);
+
+                while (hd_cur != opposite(next(hd_cur, graph), graph)) {
                     auto hd_next = opposite(next(hd_cur, graph), graph);
-                    auto ori_next = orientation(n, v, get(vpm, source(hd_next, graph)) - pt);
-                    if (ori_cur == POSITIVE && ori_next == NEGATIVE) {
-                        found = true;
-                        break;
-                    }
+                    auto v_next = normalized(get(vpm, source(hd_next, graph)) - pt);
+
+                    // A monotonic angle function in [-2, 2]
+                    auto angle = [](auto &v1, auto &v2, auto &n) {
+                        auto cos_theta = scalar_product(v1, v2);
+                        auto ori = orientation(n, v1, v2);
+                        if (ori == ZERO) {
+                            return cos_theta < 0 ? cos_theta + 1 : -cos_theta - 1;
+                        } else {
+                            return ori == NEGATIVE ? cos_theta + 1 : -cos_theta - 1;
+                        }
+                    };
+
+                    if (angle(v_cur, v, n) < angle(v_cur, v_next, n)) break;
+
                     hd_cur = hd_next;
-                    ori_cur = ori_next;
-                } while (hd_cur != halfedge(vt, graph));
-                CGAL_assertion(found);
+                    v_cur = v_next;
+                }
             }
 
             set_next(hd, next(hd_cur, graph), graph);
