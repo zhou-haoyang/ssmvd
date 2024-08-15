@@ -714,6 +714,8 @@ class SSM_restricted_voronoi_diagram {
         vert_map.clear();
         b_vert_map.clear();
 
+        if (b_trace_timer.is_running()) b_trace_timer.stop();
+        if (i_trace_timer.is_running()) i_trace_timer.stop();
         b_trace_timer.reset();
         i_trace_timer.reset();
     }
@@ -751,7 +753,7 @@ class SSM_restricted_voronoi_diagram {
 
     const Voronoi_diagram_data &voronoi_diagram() const { return *voronoi; }
 
-   private:
+   protected:
     struct Cone_line_intersection {
         T t_min, t_max;
         metric_halfedge_descriptor ed_min, ed_max;
