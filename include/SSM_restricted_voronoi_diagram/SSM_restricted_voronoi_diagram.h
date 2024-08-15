@@ -347,6 +347,7 @@ class SSM_restricted_voronoi_diagram {
         mesh_halfedge_descriptor face_hd;
         std::optional<mesh_halfedge_descriptor> prev_hd;
         Cone_descriptor k0, k1, k_prev;
+        metric_halfedge_descriptor metric_prev_hd;
         vd_vertex_descriptor v_vd;
     };
 
@@ -589,6 +590,7 @@ class SSM_restricted_voronoi_diagram {
                         k0,
                         k1_min,
                         {},
+                        metric_graph_traits::null_halfedge(),
                         v_vd,
                     });
                 }
@@ -606,6 +608,7 @@ class SSM_restricted_voronoi_diagram {
                         k0,
                         k1_min,
                         {},
+                        metric_graph_traits::null_halfedge(),
                         v_vd,
                     });
                 }
@@ -1063,6 +1066,7 @@ class SSM_restricted_voronoi_diagram {
     TRAIT_FUNC(Pline_3, construct_parametric_line, construct_parametric_line_3_object)
     TRAIT_FUNC(FT, scalar_product, compute_scalar_product_3_object)
     TRAIT_FUNC(Orientation, orientation, orientation_3_object)
+    TRAIT_FUNC(auto, intersect, intersect_3_object)
     TRAIT_FUNC(Metric_traits_data, construct_metric_traits_data, construct_metric_data_object)
     TRAIT_FUNC(auto, metric_any_intersection, metric_any_intersection_object)
     TRAIT_FUNC(auto, metric_any_intersected_face, metric_any_intersected_face_object)
@@ -1159,41 +1163,115 @@ class SSM_restricted_voronoi_diagram {
     //     return res;
     // }
 
+    struct Cone_intersection {
+        metric_face_descriptor fd;
+        metric_halfedge_descriptor hd;
+        FT t;
+    };
+
+    std::optional<Cone_intersection> find_next_cone(const Metric_data &m, metric_face_descriptor fd,
+                                                    metric_halfedge_descriptor hd_prev, const Vector_3 &p,
+                                                    const Vector_3 &d, FT tmin) const {
+        auto hd0 = halfedge(fd, m.graph);
+        for (auto hd : halfedges_around_face(hd0, m.graph)) {
+            if (hd == hd_prev) continue;
+            auto [v0, v1] = m.cone_face_bases(hd);
+            auto n = m.cone_face_orthogonal_vector(hd);
+
+            if (debug_output) {
+                std::clog << __func__ << ": test segment-cone face intersection: v0=" << v0 << ", v1=" << v1
+                          << ", n=" << n << std::endl;
+            }
+
+            FT nd = scalar_product(n, d);
+            if (is_zero(nd)) {
+                // TODO: handle the case that the line lies on the face
+                continue;
+            }
+
+            FT np = scalar_product(n, p);
+            FT ti = -np / nd;
+            if (ti < tmin) continue;
+
+            Vector_3 vi = p + ti * d;
+
+            if (!(orientation(n, v0, vi) == POSITIVE && orientation(n, vi, v1) == POSITIVE)) {
+                // p_i is outside the 2D cone
+                continue;
+            }
+
+            // The segment leaves the cone from edge hd
+            hd_prev = opposite(hd, m.graph);
+            fd = face(hd_prev, m.graph);
+            return Cone_intersection{fd, hd_prev, ti};
+        }
+        return std::nullopt;
+    }
+
+    auto find_next_cone(const Cone_descriptor &k, metric_halfedge_descriptor hd_prev, const Pline_3 &l, FT tmin) const {
+        auto [c, m] = site(k.site_idx);
+        auto p = construct_vector(c.point, construct_point(l));
+        auto d = construct_vector(l);
+        return find_next_cone(m, k.face, hd_prev, p, d, tmin);
+    }
+
     void process_i_trace(const Internal_trace &tr) {
-        auto intersect_f = traits.intersect_3_object();
-        auto pline_f = traits.construct_parametric_line_3_object();
+        // auto intersect_f = traits.intersect_3_object();
+        // auto pline_f = traits.construct_parametric_line_3_object();
 
         auto bi_ray = tr.bisect_line;
+        FT tmin = 0, tmax;  // TODO
 
         // Clip the bisector ray with the face on mesh
-        bool has_edge_isect = false;
         mesh_halfedge_descriptor edge_hd;
         Pline_3 edge;
-        for (auto hd : halfedges_around_face(tr.face_hd, mesh)) {
-            if (tr.prev_hd.has_value() && hd == *tr.prev_hd) continue;
-            edge = edge_segment(hd, mesh, vpm);
-            // T t_edge, _;
-            auto res = intersect_f(bi_ray, edge, true);
-            // auto res = CGAL::isect(bi_ray, edge, t_edge, _, true);
-            // if (res && !is_zero(t_edge)) {
-            if (res) {
-                auto [t_edge, _] = *res;
-                if (is_zero(t_edge)) continue;
-                has_edge_isect = true;
-                edge_hd = hd;
-                bi_ray = pline_f(bi_ray, -INF, t_edge);
-                break;
+        {
+            bool has_edge_isect = false;
+            for (auto hd : halfedges_around_face(tr.face_hd, mesh)) {
+                if (tr.prev_hd.has_value() && hd == *tr.prev_hd) continue;
+                edge = edge_segment(hd, mesh, vpm);
+                // T t_edge, _;
+                auto res = intersect(tr.bisect_line, edge, true);
+                // auto res = CGAL::isect(bi_ray, edge, t_edge, _, true);
+                // if (res && !is_zero(t_edge)) {
+                if (res) {
+                    auto [t_edge, _] = *res;  // TODO: leaving from vertex
+                    if (is_zero(t_edge)) continue;
+                    has_edge_isect = true;
+                    edge_hd = hd;
+                    tmax = t_edge;
+                    break;
+                }
             }
+            CGAL_assertion(has_edge_isect);
         }
-        CGAL_assertion(has_edge_isect);
 
         // Clip the bisector ray with the cones
-        T t_min, t_max;
-        index_t k_min, k_max;
-        metric_halfedge_descriptor_opt h_min, h_max;
-        bool has_cone_isect = isect(tr.k0, tr.k1, bi_ray, t_min, t_max, k_min, k_max, h_min, h_max);
-        bi_ray = pline_f(bi_ray, t_min, t_max);
-        CGAL_assertion(has_cone_isect);
+        // T t_min, t_max;
+        // index_t k_min, k_max;
+        // metric_halfedge_descriptor_opt h_min, h_max;
+        // bool has_cone_isect = isect(tr.k0, tr.k1, bi_ray, t_min, t_max, k_min, k_max, h_min, h_max);
+        // bi_ray = pline_f(bi_ray, t_min, t_max);
+        // CGAL_assertion(has_cone_isect);
+        std::optional<Cone_intersection> cone_isect = std::nullopt;
+        int cone_idx_next = -1;
+        {
+            auto isect0 = find_next_cone(tr.k0, tr.metric_prev_hd, bi_ray, tmin);
+            auto isect1 = find_next_cone(tr.k1, tr.metric_prev_hd, bi_ray, tmin);
+
+            if (isect0 && isect0->t < tmax) {
+                cone_isect = *isect0;
+                cone_idx_next = 0;
+                tmax = isect0->t;
+            }
+            if (isect1 && isect1->t < tmax) {
+                cone_isect = *isect1;
+                cone_idx_next = 1;
+                tmax = isect1->t;
+            }
+        }
+
+        bi_ray = construct_parametric_line(bi_ray, tmin, tmax);  // TODO
 
         // Find the nearest 3-site bisector intersection
         T dist_min = INF;
@@ -1222,7 +1300,7 @@ class SSM_restricted_voronoi_diagram {
                 auto s_overlap = construct_parametric_line(bi_ray, isect_overlap.t_min, isect_overlap.t_max);
 
                 // T tb;
-                auto tb = intersect_f(s_overlap, bi_plane);
+                auto tb = intersect(s_overlap, bi_plane);
                 if (!tb) continue;
 
                 auto dist = *tb - bi_ray.t_min();
@@ -1275,6 +1353,7 @@ class SSM_restricted_voronoi_diagram {
                 tr.k0,
                 k2_min,
                 tr.k1,
+                metric_graph_traits::null_halfedge(),
                 v_vd,
             });
 
@@ -1297,14 +1376,15 @@ class SSM_restricted_voronoi_diagram {
                 tr.k1,
                 k2_min,
                 tr.k0,
+                metric_graph_traits::null_halfedge(),
                 v_vd,
             });
-        } else if (h_max) {
+        } else if (cone_isect) {
             // The bisector ray intersects the cone
-            auto k0_next = k_max == 0 ? tr.k1 : tr.k0;
-            auto k1_prev = k_max == 0 ? tr.k0 : tr.k1;
+            auto k0_next = cone_idx_next == 0 ? tr.k1 : tr.k0;
+            auto k1_prev = cone_idx_next == 0 ? tr.k0 : tr.k1;
             auto [c1_prev, m1_prev] = site(k1_prev.site_idx);
-            Cone_descriptor k1_next{k1_prev.site_idx, face(opposite(*h_max, m1_prev.graph), m1_prev.graph)};
+            Cone_descriptor k1_next{k1_prev.site_idx, cone_isect->fd};
             Internal_vertex_id vid(cone_index(k0_next), cone_index(k1_next), cone_index(k1_prev), face_id);
             if (auto vd_it = vert_map.find(vid); vd_it != vert_map.cend()) {
                 voronoi.connect(tr.v_vd, vd_it->second, voronoi.fd0, voronoi.fd0);
@@ -1313,13 +1393,13 @@ class SSM_restricted_voronoi_diagram {
 
             Plane_3 bi_plane = get_bisect_plane(k0_next, k1_next);
             auto bisect_dir = cross_product(bi_plane.orthogonal_vector(), tr.face_plane.orthogonal_vector());
-            auto n = m1_prev.cone_face_orthogonal_vector(*h_max);
+            auto n = m1_prev.cone_face_orthogonal_vector(cone_isect->hd);
             if (sign(scalar_product(n, bi_ray.d())) != sign(scalar_product(n, bisect_dir))) {
                 bisect_dir = -bisect_dir;
             }
             auto bisect_line = Pline_3::ray(bi_ray.p_max(), bisect_dir);
-            auto v_vd = voronoi.add_vertex(bi_ray.p_max(),
-                                           Two_site_bisector_info{tr.face_hd, k0_next, k1_next.site_idx, *h_max});
+            auto v_vd = voronoi.add_vertex(
+                bi_ray.p_max(), Two_site_bisector_info{tr.face_hd, k0_next, k1_next.site_idx, cone_isect->hd});
             voronoi.connect(tr.v_vd, v_vd, voronoi.fd0, voronoi.fd0);
             vert_map[vid] = v_vd;
             // auto v_hd = vd.add_loop(v_vd);
@@ -1334,6 +1414,7 @@ class SSM_restricted_voronoi_diagram {
                 k0_next,
                 k1_next,
                 k1_prev,
+                cone_isect->hd,
                 v_vd,
             });
         } else {
@@ -1368,6 +1449,7 @@ class SSM_restricted_voronoi_diagram {
                 tr.k0,
                 tr.k1,
                 {},
+                metric_graph_traits::null_halfedge(),
                 v_vd,
             });
         }
