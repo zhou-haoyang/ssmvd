@@ -293,7 +293,9 @@ class SSM_restricted_voronoi_diagram {
                 // At least 2 halfedges around the target vertex
                 auto pt = get(vpm, vt), ps = get(vpm, vs);
                 auto v = ps - pt;
-                auto n = normalized(get(vertex_normal_map, vt));
+                // The halfedge loop around the vertex should be clockwise for the halfedge loop around the face
+                // to be counter-clockwise, hence the normal should point inward here
+                auto n = -normalized(get(vertex_normal_map, vt));
 
                 auto v_cur = normalized(get(vpm, source(hd_cur, graph)) - pt);
 
@@ -302,7 +304,7 @@ class SSM_restricted_voronoi_diagram {
                     auto v_next = normalized(get(vpm, source(hd_next, graph)) - pt);
 
                     // A monotonic angle function in [-2, 2]
-                    auto angle = [](auto &v1, auto &v2, auto &n) {
+                    auto angle = [](const auto &v1, const auto &v2, const auto &n) {
                         auto cos_theta = scalar_product(v1, v2);
                         auto ori = orientation(n, v1, v2);
                         if (ori == ZERO) {
