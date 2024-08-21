@@ -874,24 +874,21 @@ class SSM_restricted_voronoi_diagram {
 
             if (tmin < *it0) {
                 // tmin is in range of it0 - 1 and it0
-                res.ts.push_back(tmin);
-                res.eds.push_back(metric_graph_traits::null_halfedge());
+                res.add_intersection(tmin, metric_graph_traits::null_halfedge());
                 auto i0 = std::distance(ts.begin(), it0);
                 CGAL_assertion(i0 > 0);
-                res.fds.push_back(fds[i0 - 1]);
+                res.add_face(fds[i0 - 1]);
             }
 
             for (auto it = it0; it != it1; ++it) {
-                res.ts.push_back(*it);
                 auto i = std::distance(ts.begin(), it);
-                res.eds.push_back(eds[i]);
-                if (*it < tmax) res.fds.push_back(fds[i]);
+                res.add_intersection(*it, eds[i]);
+                if (*it < tmax) res.add_face(fds[i]);
             }
 
             if (res.ts.empty() || tmax > res.ts.back()) {
                 // tmax is in range of it1 and it1 + 1
-                res.ts.push_back(tmax);
-                res.eds.push_back(metric_graph_traits::null_halfedge());
+                res.add_intersection(tmax, metric_graph_traits::null_halfedge());
             }
         }
 
