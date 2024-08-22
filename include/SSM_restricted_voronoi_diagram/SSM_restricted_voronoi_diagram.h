@@ -353,7 +353,7 @@ class SSM_restricted_voronoi_diagram {
         Pline_3 bisect_line;
         Plane_3 bisect_plane, face_plane;
         mesh_halfedge_descriptor face_hd;
-        std::optional<mesh_halfedge_descriptor> prev_hd;
+        mesh_halfedge_descriptor prev_hd;
         Cone_descriptor k0, k1, k_prev;
         metric_halfedge_descriptor metric_prev_hd;
         vd_vertex_descriptor v_vd;
@@ -732,6 +732,7 @@ class SSM_restricted_voronoi_diagram {
         i_traces.clear();
         vert_map.clear();
         b_vert_map.clear();
+        processed_b_verts.clear();
 
         if (b_trace_timer.is_running()) b_trace_timer.stop();
         if (i_trace_timer.is_running()) i_trace_timer.stop();
@@ -743,8 +744,8 @@ class SSM_restricted_voronoi_diagram {
         if (i_traces.empty()) {
             return false;
         }
-        auto tr = std::move(i_traces.front());
-        i_traces.pop_front();
+        auto tr = std::move(i_traces.back());
+        i_traces.pop_back();
         i_trace_timer.start();
         process_i_trace(tr);
         i_trace_timer.stop();
@@ -920,6 +921,7 @@ class SSM_restricted_voronoi_diagram {
     std::unordered_map<Internal_vertex_id, vd_vertex_descriptor, Internal_vertex_id_hash> vert_map;
 
     std::unordered_map<Boundary_vertex_id, vd_vertex_descriptor, Boundary_vertex_id_hash> b_vert_map;
+    std::unordered_multimap<vd_vertex_descriptor, mesh_halfedge_descriptor> processed_b_verts;
 
     Segment_cone_intersections isects_cache;
     std::vector<Segment_cone_intersections> isects_vec_cache;
@@ -1133,6 +1135,12 @@ class SSM_restricted_voronoi_diagram {
     }
 
     void process_i_trace(const Internal_trace &tr) {
+        auto v_hd = halfedge(tr.v_vd, voronoi->graph);
+        auto range = processed_b_verts.equal_range(tr.v_vd);
+        for (auto it = range.first; it != range.second; ++it) {
+            if (it->second == v_hd) return;
+        }
+
         FT tmin = 0, tmax;
 
         // Clip the bisector ray with the face on mesh
@@ -1141,7 +1149,7 @@ class SSM_restricted_voronoi_diagram {
         {
             bool has_edge_isect = false;
             for (auto hd : halfedges_around_face(tr.face_hd, mesh)) {
-                if (tr.prev_hd.has_value() && hd == *tr.prev_hd) continue;
+                if (hd == tr.prev_hd) continue;
                 edge = mesh_edge_segment(hd);
                 // T t_edge, _;
                 auto res = intersect(tr.bisect_line, edge, true);
@@ -1259,7 +1267,7 @@ class SSM_restricted_voronoi_diagram {
                 bi_plane_min,
                 tr.face_plane,
                 edge_hd,
-                std::nullopt,
+                mesh_graph_traits::null_halfedge(),
                 tr.k0,
                 k2_min,
                 tr.k1,
@@ -1282,7 +1290,7 @@ class SSM_restricted_voronoi_diagram {
                 bisect_plane_12,
                 tr.face_plane,
                 edge_hd,
-                std::nullopt,
+                mesh_graph_traits::null_halfedge(),
                 tr.k1,
                 k2_min,
                 tr.k0,
@@ -1322,7 +1330,7 @@ class SSM_restricted_voronoi_diagram {
                 bi_plane,
                 tr.face_plane,
                 edge_hd,
-                std::nullopt,
+                mesh_graph_traits::null_halfedge(),
                 k0_next,
                 k1_next,
                 k1_prev,
@@ -1333,39 +1341,10 @@ class SSM_restricted_voronoi_diagram {
             // The bisector leaves the face on mesh
             Boundary_vertex_id bvid(cone_index(tr.k0), cone_index(tr.k1),
                                     get(edge_index_map, CGAL::edge(edge_hd, mesh)));
-            if (auto vd_it = b_vert_map.find(bvid); vd_it != b_vert_map.cend()) {
-                voronoi->connect(tr.v_vd, vd_it->second, dummy_face, dummy_face);
-                return;
-            }
-            auto edge_next_hd = opposite(edge_hd, mesh);
-            auto b_plane = mesh_face_plane(edge_next_hd);
-            auto bisect_dir = cross_product(tr.bisect_plane.orthogonal_vector(), b_plane.orthogonal_vector());
-            auto orient = orientation(b_plane.orthogonal_vector(), bisect_dir, edge.d());
-            auto p = construct_point_on(tr.bisect_line, tmax);
-            auto bisect_line = construct_parametric_line(p, orient == POSITIVE ? bisect_dir : -bisect_dir);
-            auto v_vd = voronoi->add_vertex(p, Boundary_bisector_info{tr.face_hd, tr.k0, tr.k1},
-                                            tr.face_plane.orthogonal_vector() + b_plane.orthogonal_vector());
-            voronoi->connect(tr.v_vd, v_vd, dummy_face, dummy_face);
-            b_vert_map[bvid] = v_vd;
-            // auto v_hd = vd.add_loop(v_vd);
-            // vd.set_target(tr.v_hd, v_vd);
-            // vd.set_next_double_sided(tr.v_hd, v_hd);
-
-            if (is_border(edge_next_hd, mesh)) {
-                return;
-            }
-            i_traces.push_back({
-                bisect_line,
-                tr.bisect_plane,
-                b_plane,
-                edge_next_hd,
-                edge_next_hd,
-                tr.k0,
-                tr.k1,
-                {},
-                metric_graph_traits::null_halfedge(),
-                v_vd,
-            });
+            auto vd_it = b_vert_map.find(bvid);
+            CGAL_assertion(vd_it != b_vert_map.cend());
+            voronoi->connect(tr.v_vd, vd_it->second, dummy_face, dummy_face);
+            processed_b_verts.emplace(vd_it->second, edge_hd);
         }
     }
 };
