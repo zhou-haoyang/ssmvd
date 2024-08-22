@@ -837,6 +837,12 @@ class SSM_restricted_voronoi_diagram {
         }
 
         iterator find_face(metric_face_descriptor fd) {
+            if (idx_map.empty()) {
+                for (std::size_t i = 0; i < fds.size(); ++i) {
+                    idx_map[fds[i]] = i;
+                }
+            }
+
             auto it = idx_map.find(fd);
             if (it == idx_map.end()) {
                 return end();
@@ -852,10 +858,7 @@ class SSM_restricted_voronoi_diagram {
             idx_map.clear();
         }
 
-        void add_face(metric_face_descriptor fd) {
-            idx_map[fd] = fds.size();
-            fds.push_back(fd);
-        }
+        void add_face(metric_face_descriptor fd) { fds.push_back(fd); }
 
         void add_intersection(T t, metric_halfedge_descriptor ed) {
             CGAL_assertion(empty() || t >= t_max());
