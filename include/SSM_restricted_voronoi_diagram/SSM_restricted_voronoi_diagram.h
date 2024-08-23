@@ -367,11 +367,17 @@ class SSM_restricted_voronoi_diagram {
         Metric_face_index_pmap face_index_map;
         Metric_traits_data data;
 
-        Metric_data(Metric_polyhedron graph, Metric_vertex_point_pmap vpm, Metric_face_index_pmap fim)
+        Metric_data(Metric_polyhedron &&graph, Metric_vertex_point_pmap &&vpm, Metric_face_index_pmap &&fim)
             : graph(std::move(graph)),
               vpm(std::move(vpm)),
               face_index_map(std::move(fim)),
-              data(construct_metric_traits_data(this->graph)) {}
+              data(std::move(construct_metric_traits_data(this->graph))) {}
+
+        Metric_data(Metric_polyhedron &&graph)
+            : graph(std::move(graph)),
+              vpm(std::move(get(vertex_point, this->graph))),
+              face_index_map(std::move(get(face_index, this->graph))),
+              data(std::move(construct_metric_traits_data(this->graph))) {}
 
         auto cone_face_bases(metric_halfedge_descriptor hd) const {
             auto v0 = get(vpm, source(hd, graph)) - ORIGIN;
@@ -408,13 +414,26 @@ class SSM_restricted_voronoi_diagram {
 
     void add_site(const Point_3 &p, index_t metric_idx) { sites.push_back({p, metric_idx}); }
 
+    /**
+     * @brief Add a metric attached to sites added later.
+     * To avoid copy, use add_metric(std::move(...), ...) to move the metric.
+     *
+     * @param m
+     * @param vpm
+     * @param fim
+     * @return index_t
+     */
     index_t add_metric(Metric_polyhedron m, Metric_vertex_point_pmap vpm, Metric_face_index_pmap fim) {
         auto idx = metrics.size();
         metrics.emplace_back(std::move(m), std::move(vpm), std::move(fim));
         return idx;
     }
 
-    index_t add_metric(Metric_polyhedron m) { return add_metric(m, get(vertex_point, m), get(face_index, m)); }
+    index_t add_metric(Metric_polyhedron m) {
+        auto idx = metrics.size();
+        metrics.emplace_back(std::move(m));
+        return idx;
+    }
 
     void reserve_sites(std::size_t n) { sites.reserve(n); }
 
