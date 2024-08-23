@@ -2,6 +2,7 @@
 #define SSM_RESTRICTED_VORONOI_DIAGRAM_SSM_RESTRICTED_VORONOI_DIAGRAM_H
 
 #include <CGAL/basic.h>
+#include <CGAL/boost/graph/IO/OFF.h>
 #include <SSM_restricted_voronoi_diagram/SSM_restricted_voronoi_diagram_traits.h>
 #include <Parametric_line/Parametric_line_3.h>
 
@@ -440,6 +441,46 @@ class SSM_restricted_voronoi_diagram {
     auto i_trace_cbegin() const { return i_traces.begin(); }
 
     auto i_trace_cend() const { return i_traces.end(); }
+
+    bool read_sites(std::istream &is) {
+        std::size_t n_metrics;
+        is >> n_metrics;
+
+        clear_metrics();
+        reserve_metrics(n_metrics);
+        for (size_t i = 0; i < n_metrics; ++i) {
+            Metric_polyhedron P;
+            if (!IO::read_OFF(is, P)) return false;
+            add_metric(P);
+        }
+
+        std::size_t n_sites;
+        is >> n_sites;
+        clear_sites();
+        reserve_sites(n_sites);
+        for (size_t i = 0; i < n_sites; ++i) {
+            double x, y, z;
+            index_t site_idx;
+            is >> x >> y >> z >> site_idx;
+            add_site(Point_3(x, y, z), site_idx);
+        }
+
+        return true;
+    }
+
+    bool write_sites(std::ostream &os) const {
+        os << num_metrics() << std::endl;
+        for (const auto &m : metrics) {
+            if (!IO::write_OFF(os, m.graph)) return false;
+        }
+
+        os << num_sites() << std::endl;
+        for (const auto &s : sites) {
+            os << s.point.x() << " " << s.point.y() << " " << s.point.z() << " " << s.metric_idx << std::endl;
+        }
+
+        return true;
+    }
 
     std::pair<Site &, Metric_data &> site(index_t idx) {
         auto &c = sites[idx];
