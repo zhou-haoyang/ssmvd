@@ -12,13 +12,13 @@
 #include <CGAL/Barycentric_coordinates_2/triangle_coordinates_2.h>
 
 #include <CGAL/Simple_cartesian.h>
-// #include <CGAL/AABB_tree.h>
-// #include <CGAL/AABB_traits.h>
+#include <CGAL/AABB_tree.h>
+#include <CGAL/AABB_traits.h>
 #include <CGAL/Polyhedron_3.h>
 #include <CGAL/Polyhedron_items_with_id_3.h>
 #include <CGAL/boost/graph/Seam_mesh.h>
 
-// #include <CGAL/AABB_face_graph_triangle_primitive.h>
+#include <CGAL/AABB_face_graph_triangle_primitive.h>
 #include <CGAL/boost/graph/helpers.h>
 #include <CGAL/boost/graph/iterator.h>
 #include <CGAL/convex_hull_3.h>
@@ -44,6 +44,8 @@
 #include <iostream>
 #include <unordered_map>
 #include <vector>
+#include "SSM_restricted_voronoi_diagram/AABB_metric_traits.h"
+#include "SSM_restricted_voronoi_diagram/Triangle_mesh_metric_traits.h"
 
 typedef CGAL::Simple_cartesian<double> Kernel;
 typedef Kernel::FT FT;
@@ -61,10 +63,20 @@ typedef SM_Graph_traits::face_descriptor SM_face_descriptor;
 typedef Surface_mesh::Property_map<SM_edge_descriptor, bool> Seam_edge_pmap;
 typedef Surface_mesh::Property_map<SM_vertex_descriptor, bool> Seam_vertex_pmap;
 typedef CGAL::Seam_mesh<Surface_mesh, Seam_edge_pmap, Seam_vertex_pmap> Seam_mesh;
-typedef CGAL::Polyhedron_3<Kernel, CGAL::Polyhedron_items_with_id_3> Metric_polyhedron;
+// typedef CGAL::Polyhedron_3<Kernel, CGAL::Polyhedron_items_with_id_3> Metric_polyhedron;
+typedef CGAL::Surface_mesh<Kernel::Point_3> Metric_polyhedron;
 typedef CGAL::Surface_mesh<Kernel::Point_3> Voronoi_diagram;
 namespace RVD = CGAL::SSM_restricted_voronoi_diagram;
-typedef RVD::SSM_restricted_voronoi_diagram_traits<Kernel, Surface_mesh, Metric_polyhedron, Voronoi_diagram> Traits;
+
+typedef CGAL::AABB_face_graph_triangle_primitive<Metric_polyhedron> Primitive;
+typedef CGAL::AABB_traits<Kernel, Primitive> AABB_traits;
+typedef CGAL::AABB_tree<AABB_traits> Tree;
+
+// typedef RVD::AABB_metric_traits<Kernel, Tree> Metric_traits;
+typedef RVD::Triangle_mesh_metric_traits<Kernel, Metric_polyhedron> Metric_traits;
+typedef RVD::SSM_restricted_voronoi_diagram_traits<Kernel, Surface_mesh, Metric_polyhedron, Voronoi_diagram,
+                                                   Metric_traits>
+    Traits;
 typedef RVD::SSM_restricted_voronoi_diagram<Traits> Restricted_voronoi_diagram;
 typedef Restricted_voronoi_diagram::Cone_descriptor Cone_descriptor;
 typedef boost::graph_traits<Seam_mesh> Graph_traits;
@@ -301,6 +313,7 @@ class GVDApp : public App {
 
     void update_sites() {
         size_t n_sites = gvd.num_sites();
+        site_colors.setRandom(n_sites, 3);
         Eigen::MatrixX3d site_pos(n_sites, 3);
         for (Index i = 0; i < n_sites; ++i) {
             auto [c, m] = gvd.site(i);
@@ -332,7 +345,7 @@ class GVDApp : public App {
         for (size_t i = 0; i < n_metrics; ++i) {
             Metric_polyhedron P;
             file >> P;
-            CGAL::set_halfedgeds_items_id(P);
+            // CGAL::set_halfedgeds_items_id(P);
             gvd.add_metric(P);
         }
 
@@ -346,7 +359,6 @@ class GVDApp : public App {
             file >> x >> y >> z >> site_idx;
             gvd.add_site(Point_3(x, y, z), site_idx);
         }
-        site_colors.setRandom(n_sites, 3);
         update_sites();
     }
 
@@ -370,7 +382,6 @@ class GVDApp : public App {
             gvd.add_site(pos, 0);
             site_pos.row(i) << pos.x(), pos.y(), pos.z();
         }
-        site_colors.setRandom(n_sites, 3);
         update_sites();
     }
 
@@ -543,7 +554,7 @@ class GVDApp : public App {
             m_points.emplace_back(metrics_3d(i, 0), metrics_3d(i, 1), metrics_3d(i, 2));
         }
         CGAL::convex_hull_3(m_points.begin(), m_points.end(), metric);
-        CGAL::set_halfedgeds_items_id(metric);
+        // CGAL::set_halfedgeds_items_id(metric);
         gvd.add_metric(metric);
 
         if (load_mesh("bunny.obj")) {
@@ -607,7 +618,19 @@ class GVDApp : public App {
 
             if (ImGui::Button("Load Sites")) {
                 auto path = igl::file_dialog_open();
-                load_sites(path);
+                if (path != "") {
+                    std::ifstream file(path);
+                    gvd.read_sites(file);
+                    update_sites();
+                }
+            }
+
+            if (ImGui::Button("Save Sites")) {
+                auto path = igl::file_dialog_save();
+                if (path != "") {
+                    std::ofstream file(path);
+                    gvd.write_sites(file);
+                }
             }
 
             ImGui::InputScalar("Texture Width", ImGuiDataType_S64, &tex_w);
@@ -673,15 +696,16 @@ class GVDApp : public App {
             E.row(i) << ei, ej;
             VE.row(i) = (V.row(ei) + V.row(ej)) / 2;
             // edge_labels.push_back(std::format("{} {}", he.id(), ohe.id()));
-            edge_labels.push_back(std::format("{} {}", vd.face(he).id(), vd.face(ohe).id()));
+            edge_labels.push_back(std::format("{} {} {}, {} {} {}", he.id(), vd.next(he).id(), vd.face(he).id(),
+                                              ohe.id(), vd.next(ohe).id(), vd.face(ohe).id()));
             i++;
         }
 
         std::vector<std::string> edge_vertex_labels;
         for (auto v : vd.vertices()) {
-            std::string l;
+            std::string l = std::format("{}: ", v.idx());
             for (auto hd : vd.halfedges_around_target(vd.halfedge(v))) {
-                l += std::format("{} ", hd.id());
+                l += std::format("{} ", vd.source(hd).idx());
             }
             edge_vertex_labels.push_back(l);
         }
@@ -717,9 +741,10 @@ class GVDApp : public App {
         auto it = gvd.i_trace_cbegin();
         for (Index i = 0; i < gvd.num_i_traces(); ++i, ++it) {
             auto &tr = *it;
-            auto l = tr.bisect_line.clipped(0, 0.5);
-            V.row(i * 2) << l.p_min().x(), l.p_min().y(), l.p_min().z();
-            V.row(i * 2 + 1) << l.p_max().x(), l.p_max().y(), l.p_max().z();
+            // auto l = tr.bisect_line.clipped(0, 0.5);
+            auto p_min = tr.bisect_line.point(0), p_max = tr.bisect_line.point(0.5);
+            V.row(i * 2) << p_min.x(), p_min.y(), p_min.z();
+            V.row(i * 2 + 1) << p_max.x(), p_max.y(), p_max.z();
             E.row(i) << i * 2, i * 2 + 1;
         }
 
@@ -751,7 +776,8 @@ class GVDApp : public App {
     bool key_pressed(unsigned int key, int mod) override {
         switch (key) {
             case 'b': {
-                trace_boundary();
+                gvd.reset();
+                gvd.trace_all_boundaries();
                 update_vd();
                 update_trace();
             } break;
