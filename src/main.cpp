@@ -600,6 +600,11 @@ class GVDApp : public App {
         // }
 
         if (ImGui::CollapsingHeader("VD", ImGuiTreeNodeFlags_DefaultOpen)) {
+            int verbosity_level = gvd.vout.output_level();
+            if (ImGui::InputInt("Verbosity Level", &verbosity_level)) {
+                gvd.vout.output_level(verbosity_level);
+            }
+
             if (ImGui::Button("Open Mesh")) {
                 auto filename = igl::file_dialog_open();
                 load_mesh(filename);

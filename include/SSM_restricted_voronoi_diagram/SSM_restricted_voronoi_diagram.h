@@ -1,11 +1,12 @@
 #ifndef SSM_RESTRICTED_VORONOI_DIAGRAM_SSM_RESTRICTED_VORONOI_DIAGRAM_H
 #define SSM_RESTRICTED_VORONOI_DIAGRAM_SSM_RESTRICTED_VORONOI_DIAGRAM_H
 
-#include <CGAL/basic.h>
-#include <CGAL/boost/graph/IO/OFF.h>
 #include <SSM_restricted_voronoi_diagram/SSM_restricted_voronoi_diagram_traits.h>
+#include <SSM_restricted_voronoi_diagram/Verbosity_level_ostream.h>
 #include <Parametric_line/Parametric_line_3.h>
 
+#include <CGAL/basic.h>
+#include <CGAL/boost/graph/IO/OFF.h>
 #include <CGAL/Default.h>
 #include <CGAL/Dynamic_property_map.h>
 #include <CGAL/Kernel/global_functions_3.h>
@@ -36,6 +37,8 @@
     static ret_type name(T &&...args) {                      \
         return Traits().functor()(std::forward<T>(args)...); \
     }
+
+#define SOURCE_LOC __func__ << " (" << __LINE__ << ")"
 
 namespace CGAL {
 namespace SSM_restricted_voronoi_diagram {
@@ -100,6 +103,7 @@ class SSM_restricted_voronoi_diagram {
                      typename boost::property_map<Voronoi_diagram_graph, vertex_index_t>::const_type>::type;
 
     static constexpr T INF = std::numeric_limits<T>::infinity();
+    static inline IO::Verbosity_level_ostream vout{};
 
     struct Site {
         Point_3 point;
@@ -631,10 +635,8 @@ class SSM_restricted_voronoi_diagram {
                     b_vert_map[bvid] = v_vd;
                 }
 
-                if (debug_output) {
-                    std::clog << "[b-trace] boundary 2-site bisector " << bvid << " intersects at point " << pt_start
-                              << std::endl;
-                }
+                vout << IO::level(1) << SOURCE_LOC << ": boundary 2-site bisector " << bvid << " intersects at point "
+                     << pt_start << std::endl;
 
                 if (add_border_edges && prev_vd != vd_graph_traits::null_vertex()) {
                     voronoi->connect(prev_vd, v_vd, fd0, fd1);
@@ -820,11 +822,14 @@ class SSM_restricted_voronoi_diagram {
             stat = step();
         } while (stat);
         trace_faces();
-        std::clog << "Boundary trace: count = " << b_trace_timer.intervals() << ", time = " << b_trace_timer.time()
-                  << "s, speed = " << b_trace_timer.time() / b_trace_timer.intervals() << "s/trace" << std::endl;
-        std::clog << "Internal trace: count = " << i_trace_timer.intervals() << ", time = " << i_trace_timer.time()
-                  << "s, speed = " << i_trace_timer.time() / i_trace_timer.intervals() << "s/trace" << std::endl;
         CGAL_postcondition(is_valid_face_graph(voronoi->graph, true));
+
+        vout << IO::level(1) << "profiling: boundary trace: count = " << b_trace_timer.intervals()
+             << ", time = " << b_trace_timer.time() << "s, speed = " << b_trace_timer.time() / b_trace_timer.intervals()
+             << "s/trace" << std::endl;
+        vout << IO::level(1) << "profiling: internal trace: count = " << i_trace_timer.intervals()
+             << ", time = " << i_trace_timer.time() << "s, speed = " << i_trace_timer.time() / i_trace_timer.intervals()
+             << "s/trace" << std::endl;
     }
 
     using const_voronoi_diagram_ptr = std::shared_ptr<const Voronoi_diagram_data>;
@@ -965,7 +970,6 @@ class SSM_restricted_voronoi_diagram {
     };
 
     Traits traits;
-    bool debug_output = false;
     std::vector<Site> sites;
     std::vector<Metric_data> metrics;
 
@@ -1061,9 +1065,7 @@ class SSM_restricted_voronoi_diagram {
         auto p = construct_vector(c.point, construct_point(segment));
         auto d = construct_vector(segment);
 
-        if (debug_output) {
-            std::clog << __func__ << ": site=" << c.point << ", segment=" << segment << std::endl;
-        }
+        vout << IO::level(1) << SOURCE_LOC << ": site=" << c.point << ", segment=" << segment << std::endl;
 
         auto isect0 = metric_any_intersected_face(m.data, construct_vector(c.point, pmin));
         auto isect1 = metric_any_intersected_face(m.data, construct_vector(c.point, pmax));
@@ -1085,25 +1087,29 @@ class SSM_restricted_voronoi_diagram {
                 auto [v0, v1] = m.cone_face_bases(hd);
                 auto n = m.cone_face_orthogonal_vector(hd);
 
-                if (debug_output) {
-                    std::clog << __func__ << ": test segment-cone face intersection: v0=" << v0 << ", v1=" << v1
-                              << ", n=" << n << std::endl;
-                }
+                vout << IO::level(2) << SOURCE_LOC << ": test segment-cone face intersection: v0=" << v0
+                     << ", v1=" << v1 << ", n=" << n << std::endl;
 
                 FT nd = scalar_product(n, d);
                 if (is_zero(nd)) {
+                    vout << IO::level(2) << SOURCE_LOC << ": segment is parallel to cone facet" << std::endl;
                     // TODO: handle the case that the line lies on the face
                     continue;
                 }
 
                 FT np = scalar_product(n, p);
                 FT ti = -np / nd;
-                if (ti < tmin || ti > tmax) continue;
+                if (ti < tmin || ti > tmax) {
+                    vout << IO::level(2) << SOURCE_LOC << ": intersection ti = " << ti << " is out of range"
+                         << std::endl;
+                    continue;
+                }
 
                 Vector_3 vi = p + ti * d;
 
                 if (!(orientation(n, v0, vi) == POSITIVE && orientation(n, vi, v1) == POSITIVE)) {
                     // p_i is outside the 2D cone
+                    vout << IO::level(2) << SOURCE_LOC << ": intersection is outside the cone facet" << std::endl;
                     continue;
                 }
 
@@ -1118,6 +1124,9 @@ class SSM_restricted_voronoi_diagram {
                 res.add_face(fd);
                 res.add_intersection(ti, hd);
                 found = true;
+
+                vout << IO::level(2) << SOURCE_LOC << ": segment-cone face intersection: t=" << ti << ", hd=" << hd
+                     << ", fd=" << fd << std::endl;
                 break;
             }
             CGAL_assertion_msg(found, "No intersection found");
@@ -1133,7 +1142,8 @@ class SSM_restricted_voronoi_diagram {
         }
     }
 
-    // static auto clip_all_segment_cone_intersections(const std::vector<Segment_cone_intersections> &isects, T tmin,
+    // static auto clip_all_segment_cone_intersections(const std::vector<Segment_cone_intersections> &isects, T
+    // tmin,
     //                                                 T tmax) {
     //     std::vector<Segment_cone_intersections> res;
     //     res.reserve(isects.size());
@@ -1156,11 +1166,6 @@ class SSM_restricted_voronoi_diagram {
             if (hd == hd_prev) continue;
             auto [v0, v1] = m.cone_face_bases(hd);
             auto n = m.cone_face_orthogonal_vector(hd);
-
-            if (debug_output) {
-                std::clog << __func__ << ": test segment-cone face intersection: v0=" << v0 << ", v1=" << v1
-                          << ", n=" << n << std::endl;
-            }
 
             FT nd = scalar_product(n, d);
             if (is_zero(nd)) {
