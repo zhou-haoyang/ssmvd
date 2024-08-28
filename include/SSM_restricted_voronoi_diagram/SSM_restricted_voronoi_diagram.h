@@ -201,6 +201,11 @@ class SSM_restricted_voronoi_diagram {
 
         bool operator==(const Cone_descriptor &other) const { return site_idx == other.site_idx && face == other.face; }
 
+        friend std::ostream &operator<<(std::ostream &os, const Cone_descriptor &k) {
+            os << "(s" << k.site_idx << ", " << k.face << ")";
+            return os;
+        }
+
         bool is_valid() const { return site_idx >= 0 && face != metric_graph_traits::null_face(); }
     };
 
@@ -958,7 +963,7 @@ class SSM_restricted_voronoi_diagram {
             stat = step();
         } while (stat);
         trace_faces();
-        CGAL_postcondition(is_valid_face_graph(voronoi->graph, true));
+        CGAL_postcondition(is_valid_face_graph(voronoi->graph, verbosity() > 0));
 
         vout << IO::level(1) << "profiling: boundary trace: count = " << b_trace_timer.intervals()
              << ", time = " << b_trace_timer.time() << "s, speed = " << b_trace_timer.time() / b_trace_timer.intervals()
