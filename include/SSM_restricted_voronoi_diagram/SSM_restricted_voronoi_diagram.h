@@ -688,9 +688,11 @@ class SSM_restricted_voronoi_diagram {
                         bool same_side = true, bool opposite_side = true, bool add_border_edges = false,
                         bool add_cone_vertices = false, vd_face_descriptor fd0 = vd_graph_traits::null_face(),
                         vd_face_descriptor fd1 = vd_graph_traits::null_face()) {
+        CGAL_precondition(k0.is_valid());
+
+        vout << IO::level(1) << SOURCE_LOC << ": tracing boundary " << bh << " with cone " << k0 << std::endl;
         b_trace_timer.start();
 
-        CGAL_precondition(k0.is_valid());
         auto b_line = mesh_edge_segment(bh);
         FT t_min = 0, t_max = 1;
 
@@ -723,34 +725,31 @@ class SSM_restricted_voronoi_diagram {
         // Find all boundary-cone / boundary-bisector intersections
         Cone_descriptor k_prev;
         for (;;) {
-            // Pline_3 b_segment;
-            // metric_halfedge_descriptor_opt h_min, h_max;
-            // auto res = isect(k0, b_line, b_segment, h_min, h_max);
-
             // Find nearest intersection of 2-site bisector plane with the boundary segment
             T dist_min = INF;
             T tb_min;
             Plane_3 bi_plane_min;
             Cone_descriptor k1_min;
-            for (index_t site_idx = 0; site_idx < sites.size(); ++site_idx) {
-                if (site_idx == k0.site_idx) {
+
+            for (index_t k1_site = 0; k1_site < sites.size(); ++k1_site) {
+                if (k1_site == k0.site_idx) {
                     continue;
                 }
 
+                // Iterate over all intervals of k1_site that intersect current interval of k0
                 auto isect = *isect_iter;
-                isects[site_idx].clip(max(isect.second.t_min, t_min), min(isect.second.t_max, t_max), isects_cache);
+                isects[k1_site].clip(max(isect.second.t_min, t_min), min(isect.second.t_max, t_max), isects_cache);
                 auto &isects_overlap = isects_cache;
                 for (auto [fd, isect_overlap] : isects_overlap) {
-                    Cone_descriptor k1{site_idx, fd};
+                    Cone_descriptor k1{k1_site, fd};
                     if (k1 == k_prev) continue;
 
-                    // Pline_3 b_overlap;
-                    // if (!isect(k1, b_segment, b_overlap)) continue;
                     Plane_3 bi_plane = get_bisect_plane(k0, k1);
                     if (bi_plane.is_degenerate()) continue;
 
                     auto tb = intersect(b_line, bi_plane);
                     if (!tb) continue;
+
                     // TODO: marginal case: tb is on the terminal points
                     if (*tb < isect_overlap.t_min || *tb >= isect_overlap.t_max) continue;
                     T dist = *tb - t_min;
@@ -766,7 +765,6 @@ class SSM_restricted_voronoi_diagram {
 
             if (dist_min < INF) {
                 // A 2-site bisector intersects the boundary segment
-                // auto edge_hd = opposite(bh, mesh);
                 Boundary_vertex_id bvid(cone_index(k0), cone_index(k1_min), get(edge_index_map, edge(bh, mesh)));
                 auto pt_start = b_line(tb_min);
                 vd_vertex_descriptor v_vd;
@@ -791,7 +789,6 @@ class SSM_restricted_voronoi_diagram {
                     auto bisect_line =
                         construct_parametric_line(pt_start, orient == POSITIVE ? bisect_dir : -bisect_dir);
 
-                    // auto v_hd = vd.add_loop(v_vd);
                     i_traces.push_back({
                         bisect_line,
                         bi_plane_min,
@@ -824,9 +821,6 @@ class SSM_restricted_voronoi_diagram {
                         v_vd,
                     });
                 }
-                // auto bi_dir = cross_product(bi_plane_min.orthogonal_vector(), b_plane.orthogonal_vector());
-                // auto ori = orientation(b_plane.orthogonal_vector(), bi_dir, b_line.d);
-                // auto bisect = Pline_3::ray(b_segment(tb_min), ori == POSITIVE ? bi_dir : -bi_dir);
 
                 // Switch current cone to new cone k1
                 t_min = tb_min;
@@ -836,8 +830,9 @@ class SSM_restricted_voronoi_diagram {
                 isect_iter = isects[k0.site_idx].find_face(k0.face);
                 CGAL_assertion_msg(isect_iter != isects[k0.site_idx].end(), "Boundary must intersect the cone");
             } else {
-                // The bondary segment does not intersect leave the cone. Switch to the next boundary segment
+                // The bondary segment move to the neighboring cone
                 isect_iter++;
+                // If this is the last interval
                 if (isect_iter == isects[k0.site_idx].end()) break;
 
                 // Otherwise switch to the next cone
@@ -851,19 +846,18 @@ class SSM_restricted_voronoi_diagram {
                 }
 
                 k_prev = k0;
-                // auto [c0, m0] = site(k0.site_idx);
                 k0.face = isect.first;
                 t_min = isect.second.t_min;
-
-                // b_line = pline_f(b_line, b_segment.t_max());
-                // if (b_line.is_point()) break;
             }
         }
         b_trace_timer.stop();
+        vout << IO::level(1) << SOURCE_LOC << ": boundary trace leaves from cone " << k0 << std::endl;
         return std::make_pair(k0, prev_vd);
     }
 
     void trace_all_boundaries(mesh_vertex_descriptor vd, bool add_border_edges = true, bool add_cone_vertices = false) {
+        vout << IO::level(1) << SOURCE_LOC << ": tracing all boundaries from vertex " << vd << std::endl;
+
         Cone_descriptor k0;
         find_nearest_site(get(vpm, vd), k0);
 
