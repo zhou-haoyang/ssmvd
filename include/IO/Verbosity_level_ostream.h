@@ -1,5 +1,5 @@
-#ifndef SSM_RESTRICTED_VORONOI_DIAGRAM_VERBOSITY_LEVEL_OSTREAM_H
-#define SSM_RESTRICTED_VORONOI_DIAGRAM_VERBOSITY_LEVEL_OSTREAM_H
+#ifndef IO_VERBOSITY_LEVEL_OSTREAM_H
+#define IO_VERBOSITY_LEVEL_OSTREAM_H
 
 #include <iostream>
 
@@ -80,4 +80,4 @@ inline Verbosity_level_ostream &operator<<(Verbosity_level_ostream &l, Set_level
 
 }  // namespace CGAL::IO
 
-#endif  // SSM_RESTRICTED_VORONOI_DIAGRAM_VERBOSITY_LEVEL_OSTREAM_H
+#endif  // IO_VERBOSITY_LEVEL_OSTREAM_H

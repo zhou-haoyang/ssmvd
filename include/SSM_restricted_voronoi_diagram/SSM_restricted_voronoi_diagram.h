@@ -2,7 +2,7 @@
 #define SSM_RESTRICTED_VORONOI_DIAGRAM_SSM_RESTRICTED_VORONOI_DIAGRAM_H
 
 #include <SSM_restricted_voronoi_diagram/SSM_restricted_voronoi_diagram_traits.h>
-#include <SSM_restricted_voronoi_diagram/Verbosity_level_ostream.h>
+#include <IO/Verbosity_level_ostream.h>
 #include <Parametric_line/Parametric_line_3.h>
 
 #include <CGAL/basic.h>
