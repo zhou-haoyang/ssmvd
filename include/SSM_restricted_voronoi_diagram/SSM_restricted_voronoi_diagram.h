@@ -47,63 +47,65 @@ template <class Traits, class MeshVertexPointPMap = Default, class MeshFaceIndex
           class VoronoiDiagramVertexPointPMap = Default, class VoronoiDiagramVertexIndexPMap = Default>
 class SSM_restricted_voronoi_diagram {
    public:
-    using T = Traits::T;
-    using FT = Traits::FT;
-    using Point_3 = Traits::Point_3;
-    using Vector_3 = Traits::Vector_3;
-    using Ray_3 = Traits::Ray_3;
-    using Plane_3 = Traits::Plane_3;
-    using Line_3 = Traits::Line_3;
-    using Pline_3 = Traits::Pline_3;
+#pragma region PublicTypes
+    using T = typename Traits::T;
+    using FT = typename Traits::FT;
+    using Point_3 = typename Traits::Point_3;
+    using Vector_3 = typename Traits::Vector_3;
+    using Ray_3 = typename Traits::Ray_3;
+    using Plane_3 = typename Traits::Plane_3;
+    using Line_3 = typename Traits::Line_3;
+    using Pline_3 = typename Traits::Pline_3;
 
-    using Surface_mesh = Traits::Surface_mesh;
-    using Metric_polyhedron = Traits::Metric_polyhedron;
-    using Voronoi_diagram_graph = Traits::Voronoi_diagram;
-    using Metric_traits_data = Traits::Metric_traits_data;
+    using Surface_mesh = typename Traits::Surface_mesh;
+    using Metric_polyhedron = typename Traits::Metric_polyhedron;
+    using Voronoi_diagram_graph = typename Traits::Voronoi_diagram;
+    using Metric_traits_data = typename Traits::Metric_traits_data;
 
     using index_t = std::ptrdiff_t;
 
     using mesh_graph_traits = typename boost::graph_traits<Surface_mesh>;
-    using mesh_vertex_descriptor = mesh_graph_traits::vertex_descriptor;
-    using mesh_face_descriptor = mesh_graph_traits::face_descriptor;
-    using mesh_halfedge_descriptor = mesh_graph_traits::halfedge_descriptor;
+    using mesh_vertex_descriptor = typename mesh_graph_traits::vertex_descriptor;
+    using mesh_face_descriptor = typename mesh_graph_traits::face_descriptor;
+    using mesh_halfedge_descriptor = typename mesh_graph_traits::halfedge_descriptor;
 
     using metric_graph_traits = typename boost::graph_traits<Metric_polyhedron>;
-    using metric_face_descriptor = metric_graph_traits::face_descriptor;
-    using metric_face_iterator = metric_graph_traits::face_iterator;
-    using metric_halfedge_descriptor = metric_graph_traits::halfedge_descriptor;
-    using metric_halfedge_descriptor_opt = std::optional<metric_halfedge_descriptor>;
-    using metric_edge_descriptor = metric_graph_traits::edge_descriptor;
+    using metric_face_descriptor = typename metric_graph_traits::face_descriptor;
+    using metric_face_iterator = typename metric_graph_traits::face_iterator;
+    using metric_halfedge_descriptor = typename metric_graph_traits::halfedge_descriptor;
+    using metric_edge_descriptor = typename metric_graph_traits::edge_descriptor;
 
     using vd_graph_traits = typename boost::graph_traits<Voronoi_diagram_graph>;
-    using vd_vertex_descriptor = vd_graph_traits::vertex_descriptor;
-    using vd_edge_descriptor = vd_graph_traits::edge_descriptor;
-    using vd_halfedge_descriptor = vd_graph_traits::halfedge_descriptor;
-    using vd_face_descriptor = vd_graph_traits::face_descriptor;
+    using vd_vertex_descriptor = typename vd_graph_traits::vertex_descriptor;
+    using vd_edge_descriptor = typename vd_graph_traits::edge_descriptor;
+    using vd_halfedge_descriptor = typename vd_graph_traits::halfedge_descriptor;
+    using vd_face_descriptor = typename vd_graph_traits::face_descriptor;
 
     using Mesh_vertex_point_pmap =
-        Default::Get<MeshVertexPointPMap, typename boost::property_map<Surface_mesh, vertex_point_t>::const_type>::type;
+        typename Default::Get<MeshVertexPointPMap,
+                              typename boost::property_map<Surface_mesh, vertex_point_t>::const_type>::type;
     using Mesh_face_index_pmap =
-        Default::Get<MeshFaceIndexPMap, typename boost::property_map<Surface_mesh, face_index_t>::const_type>::type;
+        typename Default::Get<MeshFaceIndexPMap,
+                              typename boost::property_map<Surface_mesh, face_index_t>::const_type>::type;
     using Mesh_edge_index_pmap =
-        Default::Get<MeshEdgeIndexPMap, typename boost::property_map<Surface_mesh, edge_index_t>::const_type>::type;
+        typename Default::Get<MeshEdgeIndexPMap,
+                              typename boost::property_map<Surface_mesh, edge_index_t>::const_type>::type;
 
     using Metric_vertex_point_pmap =
-        Default::Get<MetricVertexPointPMap,
-                     typename boost::property_map<Metric_polyhedron, vertex_point_t>::const_type>::type;
+        typename Default::Get<MetricVertexPointPMap,
+                              typename boost::property_map<Metric_polyhedron, vertex_point_t>::const_type>::type;
     using Metric_face_index_pmap =
-        Default::Get<MetricFaceIndexPMap,
-                     typename boost::property_map<Metric_polyhedron, face_index_t>::const_type>::type;
+        typename Default::Get<MetricFaceIndexPMap,
+                              typename boost::property_map<Metric_polyhedron, face_index_t>::const_type>::type;
 
     using Voronoi_diagram_vertex_point_pmap =
-        Default::Get<VoronoiDiagramVertexPointPMap,
-                     typename boost::property_map<Voronoi_diagram_graph, vertex_point_t>::const_type>::type;
+        typename Default::Get<VoronoiDiagramVertexPointPMap,
+                              typename boost::property_map<Voronoi_diagram_graph, vertex_point_t>::const_type>::type;
     using Voronoi_diagram_vertex_index_pmap =
-        Default::Get<VoronoiDiagramVertexIndexPMap,
-                     typename boost::property_map<Voronoi_diagram_graph, vertex_index_t>::const_type>::type;
+        typename Default::Get<VoronoiDiagramVertexIndexPMap,
+                              typename boost::property_map<Voronoi_diagram_graph, vertex_index_t>::const_type>::type;
 
     static constexpr T INF = std::numeric_limits<T>::infinity();
-    static inline IO::Verbosity_level_ostream vout{};
 
     struct Site {
         Point_3 point;
@@ -354,6 +356,8 @@ class SSM_restricted_voronoi_diagram {
         }
     };
 
+    using const_voronoi_diagram_ptr = std::shared_ptr<const Voronoi_diagram_data>;
+
     struct Internal_trace {
         Pline_3 bisect_line;
         Plane_3 bisect_plane, face_plane;
@@ -364,7 +368,6 @@ class SSM_restricted_voronoi_diagram {
         vd_vertex_descriptor v_vd;
     };
 
-   private:
     struct Metric_data {
         Metric_polyhedron graph;
         Metric_vertex_point_pmap vpm;
@@ -402,7 +405,142 @@ class SSM_restricted_voronoi_diagram {
             return n;
         }
     };
+#pragma endregion
 
+#pragma region PrivateTypes
+   protected:
+    struct Cone_line_intersection {
+        T t_min, t_max;
+        metric_halfedge_descriptor ed_min, ed_max;
+    };
+
+    struct Segment_cone_intersections;
+
+    class Segment_cone_intersections_iterator {
+       public:
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = typename Segment_cone_intersections::value_type;
+        using difference_type = std::ptrdiff_t;
+        using iterator = Segment_cone_intersections_iterator;
+
+        Segment_cone_intersections_iterator(Segment_cone_intersections *data, std::size_t idx) : data(data), idx(idx) {}
+
+        value_type operator*() const { return (*data)[idx]; }
+
+        iterator &operator++() {
+            ++idx;
+            return *this;
+        }
+
+        iterator operator++(int) {
+            iterator tmp = *this;
+            ++idx;
+            return tmp;
+        }
+
+        bool operator==(const iterator &other) const { return data == other.data && idx == other.idx; }
+
+       private:
+        Segment_cone_intersections *data = nullptr;
+        std::size_t idx;
+    };
+
+    struct Segment_cone_intersections {
+        using value_type = std::pair<metric_face_descriptor, Cone_line_intersection>;
+        using iterator = Segment_cone_intersections_iterator;
+
+        value_type operator[](std::size_t idx) const {
+            CGAL_assertion(idx < fds.size());
+            return std::make_pair(fds[idx], Cone_line_intersection{ts[idx], ts[idx + 1], eds[idx], eds[idx + 1]});
+        }
+
+        iterator begin() { return iterator(this, 0); }
+
+        iterator end() { return iterator(this, fds.size()); }
+
+        bool empty() const { return fds.empty(); }
+
+        std::size_t num_faces() const { return fds.size(); }
+
+        T t_min() const {
+            CGAL_assertion(!empty());
+            return ts.front();
+        }
+
+        T t_max() const {
+            CGAL_assertion(!empty());
+            return ts.back();
+        }
+
+        iterator find_face(metric_face_descriptor fd) {
+            if (idx_map.empty()) {
+                for (std::size_t i = 0; i < fds.size(); ++i) {
+                    idx_map[fds[i]] = i;
+                }
+            }
+
+            auto it = idx_map.find(fd);
+            if (it == idx_map.end()) {
+                return end();
+            }
+
+            return iterator(this, it->second);
+        }
+
+        void clear() {
+            ts.clear();
+            eds.clear();
+            fds.clear();
+            idx_map.clear();
+        }
+
+        void add_face(metric_face_descriptor fd) { fds.push_back(fd); }
+
+        void add_intersection(T t, metric_halfedge_descriptor ed) {
+            CGAL_assertion(empty() || t >= t_max());
+            ts.push_back(t);
+            eds.push_back(ed);
+        }
+
+        void clip(T tmin, T tmax, Segment_cone_intersections &res) const {
+            res.clear();
+
+            // Empty cases
+            if (empty() || tmin > tmax || tmin > t_max() || tmax < t_min()) return;
+
+            auto it0 = std::lower_bound(ts.begin(), ts.end(), tmin);
+            auto it1 = std::upper_bound(ts.begin(), ts.end(), tmax);
+
+            if (tmin < *it0) {
+                // tmin is in range of it0 - 1 and it0
+                res.add_intersection(tmin, metric_graph_traits::null_halfedge());
+                auto i0 = std::distance(ts.begin(), it0);
+                CGAL_assertion(i0 > 0);
+                res.add_face(fds[i0 - 1]);
+            }
+
+            for (auto it = it0; it != it1; ++it) {
+                auto i = std::distance(ts.begin(), it);
+                res.add_intersection(*it, eds[i]);
+                if (*it < tmax) res.add_face(fds[i]);
+            }
+
+            if (res.ts.empty() || tmax > res.ts.back()) {
+                // tmax is in range of it1 and it1 + 1
+                res.add_intersection(tmax, metric_graph_traits::null_halfedge());
+            }
+        }
+
+       private:
+        std::vector<T> ts;                            // N+1
+        std::vector<metric_halfedge_descriptor> eds;  // N+1
+        std::vector<metric_face_descriptor> fds;      // N
+
+        mutable std::unordered_map<metric_face_descriptor, size_t> idx_map;
+    };
+#pragma endregion
+
+#pragma region PublicInterface
    public:
     SSM_restricted_voronoi_diagram(const Surface_mesh &mesh, Mesh_vertex_point_pmap vpm,
                                    Mesh_face_index_pmap face_index_map, Mesh_edge_index_pmap edge_index_map,
@@ -464,6 +602,10 @@ class SSM_restricted_voronoi_diagram {
     auto i_trace_cbegin() const { return i_traces.begin(); }
 
     auto i_trace_cend() const { return i_traces.end(); }
+
+    const_voronoi_diagram_ptr voronoi_diagram_ptr() const { return voronoi; }
+
+    const Voronoi_diagram_data &voronoi_diagram() const { return *voronoi; }
 
     bool read_sites(std::istream &is) {
         std::size_t n_metrics;
@@ -832,143 +974,13 @@ class SSM_restricted_voronoi_diagram {
              << "s/trace" << std::endl;
     }
 
-    using const_voronoi_diagram_ptr = std::shared_ptr<const Voronoi_diagram_data>;
+    static int verbosity() { return vout.output_level(); }
 
-    const_voronoi_diagram_ptr voronoi_diagram_ptr() const { return voronoi; }
-
-    const Voronoi_diagram_data &voronoi_diagram() const { return *voronoi; }
+    static void set_verbosity(int level) { vout.output_level(level); }
+#pragma endregion
 
    protected:
-    struct Cone_line_intersection {
-        T t_min, t_max;
-        metric_halfedge_descriptor ed_min, ed_max;
-    };
-
-    struct Segment_cone_intersections;
-
-    class Segment_cone_intersections_iterator {
-       public:
-        using iterator_category = std::forward_iterator_tag;
-        using value_type = typename Segment_cone_intersections::value_type;
-        using difference_type = std::ptrdiff_t;
-        using iterator = Segment_cone_intersections_iterator;
-
-        Segment_cone_intersections_iterator(Segment_cone_intersections *data, std::size_t idx) : data(data), idx(idx) {}
-
-        value_type operator*() const { return (*data)[idx]; }
-
-        iterator &operator++() {
-            ++idx;
-            return *this;
-        }
-
-        iterator operator++(int) {
-            iterator tmp = *this;
-            ++idx;
-            return tmp;
-        }
-
-        bool operator==(const iterator &other) const { return data == other.data && idx == other.idx; }
-
-       private:
-        Segment_cone_intersections *data = nullptr;
-        std::size_t idx;
-    };
-
-    struct Segment_cone_intersections {
-        using value_type = std::pair<metric_face_descriptor, Cone_line_intersection>;
-        using iterator = Segment_cone_intersections_iterator;
-
-        value_type operator[](std::size_t idx) const {
-            CGAL_assertion(idx < fds.size());
-            return std::make_pair(fds[idx], Cone_line_intersection{ts[idx], ts[idx + 1], eds[idx], eds[idx + 1]});
-        }
-
-        iterator begin() { return iterator(this, 0); }
-
-        iterator end() { return iterator(this, fds.size()); }
-
-        bool empty() const { return fds.empty(); }
-
-        std::size_t num_faces() const { return fds.size(); }
-
-        T t_min() const {
-            CGAL_assertion(!empty());
-            return ts.front();
-        }
-
-        T t_max() const {
-            CGAL_assertion(!empty());
-            return ts.back();
-        }
-
-        iterator find_face(metric_face_descriptor fd) {
-            if (idx_map.empty()) {
-                for (std::size_t i = 0; i < fds.size(); ++i) {
-                    idx_map[fds[i]] = i;
-                }
-            }
-
-            auto it = idx_map.find(fd);
-            if (it == idx_map.end()) {
-                return end();
-            }
-
-            return iterator(this, it->second);
-        }
-
-        void clear() {
-            ts.clear();
-            eds.clear();
-            fds.clear();
-            idx_map.clear();
-        }
-
-        void add_face(metric_face_descriptor fd) { fds.push_back(fd); }
-
-        void add_intersection(T t, metric_halfedge_descriptor ed) {
-            CGAL_assertion(empty() || t >= t_max());
-            ts.push_back(t);
-            eds.push_back(ed);
-        }
-
-        void clip(T tmin, T tmax, Segment_cone_intersections &res) const {
-            res.clear();
-
-            // Empty cases
-            if (empty() || tmin > tmax || tmin > t_max() || tmax < t_min()) return;
-
-            auto it0 = std::lower_bound(ts.begin(), ts.end(), tmin);
-            auto it1 = std::upper_bound(ts.begin(), ts.end(), tmax);
-
-            if (tmin < *it0) {
-                // tmin is in range of it0 - 1 and it0
-                res.add_intersection(tmin, metric_graph_traits::null_halfedge());
-                auto i0 = std::distance(ts.begin(), it0);
-                CGAL_assertion(i0 > 0);
-                res.add_face(fds[i0 - 1]);
-            }
-
-            for (auto it = it0; it != it1; ++it) {
-                auto i = std::distance(ts.begin(), it);
-                res.add_intersection(*it, eds[i]);
-                if (*it < tmax) res.add_face(fds[i]);
-            }
-
-            if (res.ts.empty() || tmax > res.ts.back()) {
-                // tmax is in range of it1 and it1 + 1
-                res.add_intersection(tmax, metric_graph_traits::null_halfedge());
-            }
-        }
-
-       private:
-        std::vector<T> ts;                            // N+1
-        std::vector<metric_halfedge_descriptor> eds;  // N+1
-        std::vector<metric_face_descriptor> fds;      // N
-
-        mutable std::unordered_map<metric_face_descriptor, size_t> idx_map;
-    };
-
+#pragma region PrivateVariables
     Traits traits;
     std::vector<Site> sites;
     std::vector<Metric_data> metrics;
@@ -991,7 +1003,10 @@ class SSM_restricted_voronoi_diagram {
     std::vector<Segment_cone_intersections> isects_vec_cache;
 
     Real_timer b_trace_timer, i_trace_timer;
+    static inline IO::Verbosity_level_ostream vout{};
+#pragma endregion
 
+#pragma region PrivateMethods
     Cone_index cone_index(const Cone_descriptor &k) const {
         auto [c, m] = site(k.site_idx);
         return {k.site_idx, m.face_index_map[k.face]};
@@ -1412,6 +1427,7 @@ class SSM_restricted_voronoi_diagram {
             processed_b_verts.emplace(vd_it->second, edge_hd);
         }
     }
+#pragma endregion
 };
 }  // namespace SSM_restricted_voronoi_diagram
 }  // namespace CGAL
