@@ -1067,7 +1067,6 @@ class SSM_restricted_voronoi_diagram {
 
     void find_segment_cone_intersections(index_t site_idx, const Pline_3 &segment, FT tmin, FT tmax,
                                          Segment_cone_intersections &res) const {
-        // CGAL_precondition(traits.is_segment_3_object()(segment));
         auto [c, m] = site(site_idx);
         auto pmin = construct_point_on(segment, tmin);
         auto pmax = construct_point_on(segment, tmax);
@@ -1126,10 +1125,6 @@ class SSM_restricted_voronoi_diagram {
                 hd_prev = opposite(hd, m.graph);
                 fd = face(hd_prev, m.graph);
 
-                // res.ts.push_back(ti);
-                // res.eds.push_back(hd);
-                // res.fds.push_back(fd);
-
                 res.add_face(fd);
                 res.add_intersection(ti, hd);
                 found = true;
@@ -1150,16 +1145,6 @@ class SSM_restricted_voronoi_diagram {
             find_segment_cone_intersections(site_idx, segment, tmin, tmax, res[site_idx]);
         }
     }
-
-    // static auto clip_all_segment_cone_intersections(const std::vector<Segment_cone_intersections> &isects, T
-    // tmin,
-    //                                                 T tmax) {
-    //     std::vector<Segment_cone_intersections> res;
-    //     res.reserve(isects.size());
-    //     std::transform(isects.begin(), isects.end(), std::back_inserter(res),
-    //                    [=](const Segment_cone_intersections &isects) { return isects.clip(tmin, tmax); });
-    //     return res;
-    // }
 
     struct Cone_intersection {
         metric_face_descriptor fd;
@@ -1209,12 +1194,14 @@ class SSM_restricted_voronoi_diagram {
     }
 
     void process_i_trace(const Internal_trace &tr) {
+        // Check if the bisector has already been traced (from another direction)
         auto v_hd = halfedge(tr.v_vd, voronoi->graph);
         auto range = processed_b_verts.equal_range(tr.v_vd);
         for (auto it = range.first; it != range.second; ++it) {
             if (it->second == v_hd) return;
         }
 
+        // Range of the bisector segment
         FT tmin = 0, tmax;
 
         // Clip the bisector ray with the face on mesh
@@ -1225,10 +1212,7 @@ class SSM_restricted_voronoi_diagram {
             for (auto hd : halfedges_around_face(tr.face_hd, mesh)) {
                 if (hd == tr.prev_hd) continue;
                 edge = mesh_edge_segment(hd);
-                // T t_edge, _;
                 auto res = intersect(tr.bisect_line, edge, true);
-                // auto res = CGAL::isect(bi_ray, edge, t_edge, _, true);
-                // if (res && !is_zero(t_edge)) {
                 if (res) {
                     auto [t_edge, t_mesh] = *res;  // TODO: leaving from vertex
                     if (t_edge <= 0 || t_mesh < 0 || t_mesh >= 1) continue;
@@ -1242,13 +1226,7 @@ class SSM_restricted_voronoi_diagram {
             CGAL_assertion(has_edge_isect);
         }
 
-        // Clip the bisector ray with the cones
-        // T t_min, t_max;
-        // index_t k_min, k_max;
-        // metric_halfedge_descriptor_opt h_min, h_max;
-        // bool has_cone_isect = isect(tr.k0, tr.k1, bi_ray, t_min, t_max, k_min, k_max, h_min, h_max);
-        // bi_ray = pline_f(bi_ray, t_min, t_max);
-        // CGAL_assertion(has_cone_isect);
+        // Check if the bisector leaves the cone k0 or k1
         std::optional<Cone_intersection> cone_isect = std::nullopt;
         int cone_idx_next = -1;
         {
@@ -1273,26 +1251,25 @@ class SSM_restricted_voronoi_diagram {
         Plane_3 bi_plane_min;
         Cone_descriptor k2_min;
 
-        for (index_t site_idx = 0; site_idx < sites.size(); ++site_idx) {
-            if (site_idx == tr.k0.site_idx || site_idx == tr.k1.site_idx) {
+        for (index_t k2_site = 0; k2_site < sites.size(); ++k2_site) {
+            if (k2_site == tr.k0.site_idx || k2_site == tr.k1.site_idx) {
                 continue;
             }
 
-            find_segment_cone_intersections(site_idx, tr.bisect_line, tmin, tmax, isects_cache);
+            find_segment_cone_intersections(k2_site, tr.bisect_line, tmin, tmax, isects_cache);
             auto &isects = isects_cache;
-            auto [c, m] = site(site_idx);
+            auto [c, m] = site(k2_site);
             for (auto [fd, isect_overlap] : isects) {
-                Cone_descriptor k2{site_idx, fd};
+                Cone_descriptor k2{k2_site, fd};
                 if (k2 == tr.k_prev) continue;
-
-                // Pline_3 s_overlap;
-                // if (!isect(k2, bi_ray, s_overlap)) continue;
 
                 Plane_3 bi_plane = get_bisect_plane(tr.k0, k2);
                 if (bi_plane.is_degenerate()) continue;
 
                 auto tb = intersect(tr.bisect_line, bi_plane);
                 if (!tb) continue;
+
+                // TODO: marginal case: tb is on the terminal points
                 if (*tb < isect_overlap.t_min || *tb >= isect_overlap.t_max) continue;
 
                 auto dist = *tb - tmin;
@@ -1307,9 +1284,6 @@ class SSM_restricted_voronoi_diagram {
             }
         }
 
-        // Find intersection with the boundary
-        // TODO
-
         auto face_id = get(face_index_map, face(tr.face_hd, mesh));
         if (dist_min < INF) {
             // Found a 3-site bisector
@@ -1318,6 +1292,8 @@ class SSM_restricted_voronoi_diagram {
                 voronoi->connect(tr.v_vd, vd_it->second, dummy_face, dummy_face);
                 return;
             }
+
+            // Add branch bisector of site 0 and 2
             auto bisect_dir_02 = cross_product(bi_plane_min.orthogonal_vector(), tr.face_plane.orthogonal_vector());
             auto [c0, m0] = site(tr.k0.site_idx);
             auto [c1, m1] = site(tr.k1.site_idx);
@@ -1333,9 +1309,7 @@ class SSM_restricted_voronoi_diagram {
                                             tr.face_plane.orthogonal_vector());
             voronoi->connect(tr.v_vd, v_vd, dummy_face, dummy_face);
             vert_map[vid] = v_vd;
-            // vd.set_target(tr.v_hd, v_vd);
 
-            // auto v_hd_02 = vd.add_loop(v_vd);
             i_traces.push_back({
                 bisect_line_02,
                 bi_plane_min,
@@ -1349,6 +1323,7 @@ class SSM_restricted_voronoi_diagram {
                 v_vd,
             });
 
+            // Add branch bisector of site 1 and 2
             auto bisect_plane_12 = get_bisect_plane(tr.k1, k2_min);
             CGAL_assertion(!bisect_plane_12.is_degenerate());
 
@@ -1358,7 +1333,6 @@ class SSM_restricted_voronoi_diagram {
                 bisect_dir_12 = -bisect_dir_12;
             }
             auto bisect_line_12 = construct_parametric_line(pt_start, bisect_dir_12);
-            // auto v_hd_12 = vd.add_loop(v_vd);
             i_traces.push_back({
                 bisect_line_12,
                 bisect_plane_12,
@@ -1377,6 +1351,7 @@ class SSM_restricted_voronoi_diagram {
             auto k1_prev = cone_idx_next == 0 ? tr.k0 : tr.k1;
             auto [c1_prev, m1_prev] = site(k1_prev.site_idx);
             Cone_descriptor k1_next{k1_prev.site_idx, cone_isect->fd};
+
             Internal_vertex_id vid(cone_index(k0_next), cone_index(k1_next), cone_index(k1_prev), face_id);
             if (auto vd_it = vert_map.find(vid); vd_it != vert_map.cend()) {
                 voronoi->connect(tr.v_vd, vd_it->second, dummy_face, dummy_face);
@@ -1396,9 +1371,7 @@ class SSM_restricted_voronoi_diagram {
                                     tr.face_plane.orthogonal_vector());
             voronoi->connect(tr.v_vd, v_vd, dummy_face, dummy_face);
             vert_map[vid] = v_vd;
-            // auto v_hd = vd.add_loop(v_vd);
-            // vd.set_target(tr.v_hd, v_vd);
-            // vd.set_next_double_sided(tr.v_hd, v_hd);
+
             i_traces.push_back({
                 bisect_line,
                 bi_plane,
@@ -1416,7 +1389,7 @@ class SSM_restricted_voronoi_diagram {
             Boundary_vertex_id bvid(cone_index(tr.k0), cone_index(tr.k1),
                                     get(edge_index_map, CGAL::edge(edge_hd, mesh)));
             auto vd_it = b_vert_map.find(bvid);
-            CGAL_assertion(vd_it != b_vert_map.cend());
+            CGAL_assertion_msg(vd_it != b_vert_map.cend(), "Bisector leaves the face from an unknown vertex");
             voronoi->connect(tr.v_vd, vd_it->second, dummy_face, dummy_face);
             processed_b_verts.emplace(vd_it->second, edge_hd);
         }
