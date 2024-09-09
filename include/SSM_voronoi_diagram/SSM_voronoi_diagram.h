@@ -1,0 +1,425 @@
+#ifndef INCLUDE_SSM_VORONOI_DIAGRAM_SSM_VORONOI_DIAGRAM_H
+#define INCLUDE_SSM_VORONOI_DIAGRAM_SSM_VORONOI_DIAGRAM_H
+
+#include <CGAL/Default.h>
+#include <CGAL/Origin.h>
+#include <CGAL/Polygon_2.h>
+
+#include <boost/graph/graph_traits.hpp>
+#include <list>
+#include <optional>
+#include <variant>
+
+#define TRAIT_FUNC(ret_type, name, functor)                  \
+    template <class... T>                                    \
+    ret_type name(T&&... args) {                             \
+        return m_traits.functor()(std::forward<T>(args)...); \
+    }
+
+#define PROPERTY(type, name)        \
+    const type& name() const {      \
+        return m_##name;            \
+    }                               \
+                                    \
+    type& name() {                  \
+        return m_##name;            \
+    }                               \
+                                    \
+    void set_##name(type name) {    \
+        m_##name = std::move(name); \
+    }
+
+namespace CGAL::SSM_voronoi_diagram {
+template <class Traits, class VoronoiDiagramVertexPointPMap = Default, class VoronoiDiagramVertexIndexPMap = Default>
+class SSM_voronoi_diagram {
+   public:
+    using FT = typename Traits::FT;
+    using Point_2 = typename Traits::Point_2;
+    using Vector_2 = typename Traits::Vector_2;
+    using Polygon_2 = typename Traits::Polygon_2;
+    using Parametric_line_2 = typename Traits::Parametric_line_2;
+
+    using Metric = typename Traits::Metric;
+    using Metric_traits = typename Traits::Metric_traits;
+    using Metric_edge_iterator = typename Metric::Edge_const_iterator;
+
+    class Metric_data {
+       public:
+        Metric_data(Metric m, Metric_traits traits) : m_polygon(std::move(m)), m_traits(std::move(traits)) {}
+
+        auto& polygon() const { return m_polygon; }
+        auto& traits() const { return m_traits; }
+
+        auto any_intersection(const Vector_2& d) { return _any_intersection(m_polygon, d); }
+
+        auto any_intersected_edge(const Vector_2& d) { return _any_intersected_edge(m_polygon, d); }
+
+       private:
+        Metric m_polygon;
+        Metric_traits m_traits;
+
+        TRAIT_FUNC(auto, _any_intersection, metric_any_intersection_object)
+        TRAIT_FUNC(auto, _any_intersected_edge, metric_any_intersected_edge_object)
+    };
+
+    using Metric_list = std::list<Metric_data>;
+    using Metric_iterator = typename Metric_list::iterator;
+
+    class Site {
+       public:
+        Site(Point_2 p, Metric_iterator m) : m_point(std::move(p)), m_metric(std::move(m)) {}
+
+        PROPERTY(Point_2, point)
+        PROPERTY(Metric_iterator, metric)
+
+       private:
+        Point_2 m_point;
+        Metric_iterator m_metric;
+    };
+
+    using Site_list = std::list<Site>;
+    using Site_iterator = typename Site_list::iterator;
+
+    class Cone_descriptor {
+       public:
+        Cone_descriptor(Site_iterator s, Metric_edge_iterator e) : m_site(std::move(s)), m_edge(std::move(e)) {}
+
+        PROPERTY(Site_iterator, site)
+        PROPERTY(Metric_edge_iterator, edge)
+
+       private:
+        Site_iterator m_site;
+        Metric_edge_iterator m_edge;
+    };
+
+    using Voronoi_diagram = typename Traits::Voronoi_diagram;
+    using vd_graph_traits = typename boost::graph_traits<Voronoi_diagram>;
+    using vd_vertex_descriptor = typename vd_graph_traits::vertex_descriptor;
+    using vd_edge_descriptor = typename vd_graph_traits::edge_descriptor;
+    using vd_halfedge_descriptor = typename vd_graph_traits::halfedge_descriptor;
+    using vd_face_descriptor = typename vd_graph_traits::face_descriptor;
+
+   protected:
+    struct Cone_line_intersection {
+        FT tmin;
+        std::optional<FT> tmax;
+    };
+
+    struct Segment_cone_intervals;
+
+    class Segment_cone_intervals_iterator {
+       public:
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = typename Segment_cone_intervals::value_type;
+        using difference_type = std::ptrdiff_t;
+        using iterator = Segment_cone_intervals_iterator;
+
+        Segment_cone_intervals_iterator(Segment_cone_intervals* data, std::size_t idx) : data(data), idx(idx) {}
+
+        value_type operator*() const { return (*data)[idx]; }
+
+        iterator& operator++() {
+            ++idx;
+            return *this;
+        }
+
+        iterator operator++(int) {
+            iterator tmp = *this;
+            ++idx;
+            return tmp;
+        }
+
+        bool operator==(const iterator& other) const { return data == other.data && idx == other.idx; }
+
+       private:
+        Segment_cone_intervals* data = nullptr;
+        std::size_t idx;
+    };
+
+    struct Segment_cone_intervals {
+        using value_type = std::pair<Metric_edge_iterator, Cone_line_intersection>;
+        using iterator = Segment_cone_intervals_iterator;
+
+        value_type operator[](std::size_t idx) const {
+            CGAL_assertion(is_valid() && idx < num_cones());
+            return std::make_pair(
+                eds[idx],
+                Cone_line_intersection{ts[idx], idx + 1 >= ts.size() ? std::nullopt : std::make_optional(ts[idx + 1])});
+        }
+
+        iterator begin() { return iterator(this, 0); }
+
+        iterator end() { return iterator(this, eds.size()); }
+
+        bool empty() const { return eds.empty(); }
+
+        bool is_infinite() const { return ts.size() == eds.size(); }
+
+        bool is_valid() const { return is_infinite() || ts.size() == eds.size() + 1; }
+
+        std::size_t num_cones() const { return eds.size(); }
+
+        FT t_min() const {
+            CGAL_assertion(!empty());
+            return ts.front();
+        }
+
+        std::optional<FT> t_max() const {
+            CGAL_assertion(!empty());
+            return is_infinite() ? std::nullopt : std::make_optional(ts.back());
+        }
+
+        iterator find_cone(Metric_edge_iterator ed) {
+            // if (idx_map.empty()) {
+            //     for (std::size_t i = 0; i < eds.size(); ++i) {
+            //         idx_map[eds[i]] = i;
+            //     }
+            // }
+
+            // auto it = idx_map.find(ed);
+            // if (it == idx_map.end()) {
+            //     return end();
+            // }
+
+            auto it = std::find(eds.begin(), eds.end(), ed);
+
+            return iterator(this, std::distance(eds.begin(), it));
+        }
+
+        void clear() {
+            ts.clear();
+            eds.clear();
+            // idx_map.clear();
+        }
+
+        void add_edge(Metric_edge_iterator ed) { eds.push_back(ed); }
+
+        void add_intersection(FT t) {
+            CGAL_assertion(empty() || t >= t_max());
+            ts.push_back(t);
+        }
+
+        void clip(FT tmin, FT tmax, Segment_cone_intervals& res) const {
+            res.clear();
+
+            // Empty cases
+            if (empty() || tmin > tmax || tmin > t_max() || tmax < t_min()) return;
+
+            auto it0 = std::lower_bound(ts.begin(), ts.end(), tmin);
+            auto it1 = std::upper_bound(ts.begin(), ts.end(), tmax);
+
+            if (tmin < *it0) {
+                // tmin is in range of it0 - 1 and it0
+                res.add_intersection(tmin);
+                auto i0 = std::distance(ts.begin(), it0);
+                CGAL_assertion(i0 > 0);
+                res.add_edge(eds[i0 - 1]);
+            }
+
+            for (auto it = it0; it != it1; ++it) {
+                auto i = std::distance(ts.begin(), it);
+                res.add_intersection(*it, eds[i]);
+                if (*it < tmax) res.add_edge(eds[i]);
+            }
+
+            if (res.ts.empty() || tmax > res.ts.back()) {
+                // tmax is in range of it1 and it1 + 1
+                res.add_intersection(tmax);
+            }
+        }
+
+       private:
+        std::vector<FT> ts;                     // N+1
+        std::vector<Metric_edge_iterator> eds;  // N
+
+        // mutable std::unordered_map<Metric_edge_iterator, size_t> idx_map;
+    };
+
+    SSM_voronoi_diagram(const Polygon_2& boundary, Traits traits = {})
+        : m_boundary(boundary), m_traits(std::move(traits)) {}
+
+    Metric_iterator add_metric(Metric m) { return m_metrics.emplace(m_metrics.end(), std::move(m), m_traits); }
+
+    Site_iterator add_site(Point_2 p, Metric_iterator m) { return m_sites.emplace(m_sites.end(), std::move(p), m); }
+
+    FT find_nearest_site(const Point_2& p, Cone_descriptor& cone) const {
+        FT d_min;
+        bool init = true;
+
+        for (auto site_it = m_sites.begin(); site_it != m_sites.end(); ++site_it) {
+            auto res = site_it->metric()->any_intersection(construct_vector(site_it->point(), p));
+            if (!res) continue;
+            auto [pm, ed] = *res;
+            FT weight = 1.0 / squared_distance(ORIGIN, pm);
+
+            auto d = approximate_sqrt(squared_distance(p, site_it->point()) * weight);
+            if (d < d_min || init) {
+                d_min = d;
+                cone.set_site(site_it);
+                cone.set_edge(ed);
+            }
+        }
+
+        return d_min;
+    }
+
+    auto trace_boundary(Metric_edge_iterator ed, Cone_descriptor k0) {
+        auto b_line = construct_parametric_line(*ed);
+        FT tmin = 0, tmax = 1;
+    }
+
+   protected:
+    const Polygon_2& m_boundary;
+    Metric_list m_metrics;
+    Site_list m_sites;
+    Traits m_traits;
+
+    TRAIT_FUNC(Vector_2, construct_vector, construct_vector_2_object)
+    TRAIT_FUNC(Point_2, construct_point, construct_point_2_object)
+    TRAIT_FUNC(Point_2, construct_point_on, construct_point_on_2_object)
+    TRAIT_FUNC(Point_2, construct_source, construct_source_2_object)
+    TRAIT_FUNC(Point_2, construct_target, construct_target_2_object)
+    TRAIT_FUNC(Parametric_line_2, construct_parametric_line, construct_parametric_line_2_object)
+    TRAIT_FUNC(FT, squared_distance, compute_squared_distance_2_object)
+    TRAIT_FUNC(FT, determinant, compute_determinant_2_object)
+
+    struct Colinear {
+        // operator =
+        bool operator==(const Colinear&) const { return true; }
+    };
+
+    using Parametric_line_intersection = std::variant<std::pair<FT, FT>, Colinear>;
+
+    /**
+     * @brief Find the intersection of a parametric line with a ray with direction d and starting at the origin.
+     *
+     * @param l
+     * @param d
+     * @return std::optional<FT>
+     */
+    std::optional<Parametric_line_intersection> intersect(const Vector_2& lp, const Vector_2& ld, const Vector_2& d) {
+        FT det = determinant(ld, d);
+        if (is_zero(det)) {
+            if (is_zero(determinant(lp, d))) {
+                return Colinear{};
+            }
+            return std::nullopt;  // Parallel
+        }
+
+        FT denorm = 1.0 / det;
+        FT tr = denorm * determinant(ld, lp);
+        if (tr < 0) return std::nullopt;
+
+        FT ts = denorm * determinant(d, lp);
+        return std::make_pair(ts, tr);
+    }
+
+    std::optional<Parametric_line_intersection> intersect(const Vector_2& lp, const Vector_2& ld, const Vector_2& d,
+                                                          FT tmin, std::optional<FT> tmax) {
+        auto isect = intersect(lp, ld, d);
+        if (!isect || std::holds_alternative<Colinear>(*isect)) return isect;
+
+        auto [ts, tr] = std::get<std::pair<FT, FT>>(*isect);
+        if (ts < tmin || (tmax && ts >= *tmax)) return std::nullopt;  // TODO: check if t1 == tmax
+        return isect;
+    }
+
+    auto find_segment_cone_intervals(Site_iterator site, const Parametric_line_2& segment, Segment_cone_intervals& res,
+                                     FT tmin, std::optional<FT> tmax = std::nullopt) {
+        res.clear();
+
+        if (tmax && tmin > *tmax) return;
+
+        auto pmin = construct_point_on(segment, tmin);
+        auto p = construct_vector(site->point(), construct_point(segment));
+        auto d = construct_vector(segment);
+
+        // TODO: check case 3
+
+        auto isect = site->metric()->any_intersected_edge(construct_vector(site->point(), pmin));
+        // auto isect1 = metric_any_intersected_face(m.data, construct_vector(c.point, pmax));
+
+        CGAL_assertion(!!isect);
+        Metric_edge_iterator ed0 = *isect;
+
+        // Find next cone of ed0
+        Point_2 p0 = construct_source(*ed0);
+        auto isect0 = intersect(p, d, construct_vector(ORIGIN, p0), tmin, tmax);
+        int next_cone_idx = -1;
+        if (isect0) {
+            if (std::holds_alternative<Colinear>(*isect0)) {
+                // TODO: case 2.b, 2.c
+                CGAL_assertion(false);
+            } else {
+                auto [ts, tr] = std::get<std::pair<FT, FT>>(*isect0);
+                if (is_zero(ts)) {
+                    // TODO: case 2.a
+
+                    CGAL_assertion(false);
+                } else if (is_zero(tr)) {
+                    // TODO: case 1.b
+                    CGAL_assertion(false);
+                } else {
+                    // case 1.a
+                    res.add_intersection(tmin);
+                    res.add_edge(ed0);
+
+                    res.add_intersection(ts);
+
+                    next_cone_idx = 0;
+                    --ed0;
+                    res.add_edge(ed0);
+                }
+            }
+        } else {
+            Point_2 p1 = construct_target(*ed0);
+            auto isect1 = intersect(p, d, construct_vector(ORIGIN, p1), tmin, tmax);
+            if (!isect1) {
+                // Segment is in one cone
+                res.add_intersection(tmin);
+                res.add_edge(ed0);
+                if (tmax) res.add_intersection(*tmax);
+                return;
+            }
+
+            if (std::holds_alternative<Colinear>(*isect0)) {
+                // TODO: case 2.b, 2.c
+                CGAL_assertion(false);
+            } else {
+                auto [ts, tr] = std::get<std::pair<FT, FT>>(*isect1);
+                if (is_zero(ts)) {
+                    // TODO: case 2.a
+                    CGAL_assertion(false);
+                } else if (is_zero(tr)) {
+                    // TODO: case 1.b
+                    CGAL_assertion(false);
+                } else {
+                    // case 1.a
+                    res.add_intersection(tmin);
+                    res.add_edge(ed0);
+
+                    res.add_intersection(ts);
+
+                    next_cone_idx = 1;
+                    ++ed0;
+                    res.add_edge(ed0);
+                }
+            }
+        }
+
+        while (true) {
+            Point_2 p_next = next_cone_idx == 0 ? construct_source(*ed0) : construct_target(*ed0);
+            auto isect_next = intersect(p, d, construct_vector(ORIGIN, p_next), tmin, tmax);
+            if (!isect_next) break;
+            auto [ts, tr] = std::get<std::pair<FT, FT>>(*isect_next);
+            CGAL_assertion(ts > tmin && tr > 0);
+            res.add_intersection(ts);
+
+            next_cone_idx == 0 ? --ed0 : ++ed0;
+            res.add_edge(ed0);
+        }
+        if (tmax) res.add_intersection(*tmax);
+    }
+};
+}  // namespace CGAL::SSM_voronoi_diagram
+#endif  // INCLUDE_SSM_VORONOI_DIAGRAM_SSM_VORONOI_DIAGRAM_H
