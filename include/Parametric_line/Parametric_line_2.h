@@ -18,6 +18,8 @@ struct Parametric_line_2 {
 
     Parametric_line_2(Point_2 p = {}, Vector_2 d = {}) : m_p(std::move(p)), m_d(std::move(d)) {}
 
+    Parametric_line_2(const Point_2 &p0, const Point_2 &p1) : m_p(p0), m_d(p1 - p0) {}
+
     Point_2 operator()(FT t) const { return point(t); }
 
     friend std::ostream &operator<<(std::ostream &os, const Parametric_line_2 &l) {
@@ -44,7 +46,6 @@ class Parametric_line_traits_2 {
     using FT = typename K::FT;
     using Point_2 = typename K::Point_2;
     using Vector_2 = typename K::Vector_2;
-    using Plane_2 = typename K::Plane_2;
     using Self = Parametric_line_traits_2<K>;
     using Parametric_line_2 = Parametric_line_2<Self>;
 
