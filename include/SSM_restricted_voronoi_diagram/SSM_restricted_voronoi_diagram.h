@@ -201,11 +201,6 @@ class SSM_restricted_voronoi_diagram {
 
         bool operator==(const Cone_descriptor &other) const { return site_idx == other.site_idx && face == other.face; }
 
-        friend std::ostream &operator<<(std::ostream &os, const Cone_descriptor &k) {
-            os << "(s" << k.site_idx << ", " << k.face << ")";
-            return os;
-        }
-
         bool is_valid() const { return site_idx >= 0 && face != metric_graph_traits::null_face(); }
     };
 
@@ -695,7 +690,8 @@ class SSM_restricted_voronoi_diagram {
                         vd_face_descriptor fd1 = vd_graph_traits::null_face()) {
         CGAL_precondition(k0.is_valid());
 
-        vout << IO::level(1) << SOURCE_LOC << ": tracing boundary " << bh << " with cone " << k0 << std::endl;
+        vout << IO::level(1) << SOURCE_LOC << ": tracing boundary " << bh << " with cone " << cone_index(k0)
+             << std::endl;
         b_trace_timer.start();
 
         auto b_line = mesh_edge_segment(bh);
@@ -856,12 +852,12 @@ class SSM_restricted_voronoi_diagram {
             }
         }
         b_trace_timer.stop();
-        vout << IO::level(1) << SOURCE_LOC << ": boundary trace leaves from cone " << k0 << std::endl;
+        vout << IO::level(1) << SOURCE_LOC << ": boundary trace leaves from cone " << cone_index(k0) << std::endl;
         return std::make_pair(k0, prev_vd);
     }
 
     void trace_all_boundaries(mesh_vertex_descriptor vd, bool add_border_edges = true, bool add_cone_vertices = false) {
-        vout << IO::level(1) << SOURCE_LOC << ": tracing all boundaries from vertex " << vd << std::endl;
+        vout << IO::level(1) << SOURCE_LOC << ": start" << std::endl;
 
         Cone_descriptor k0;
         find_nearest_site(get(vpm, vd), k0);
@@ -1080,8 +1076,8 @@ class SSM_restricted_voronoi_diagram {
                                                     metric_halfedge_descriptor hd_prev, const Vector_3 &p,
                                                     const Vector_3 &d, FT tmin,
                                                     std::optional<FT> tmax = std::nullopt) const {
-        vout << IO::level(3) << SOURCE_LOC << ": start: fd=" << fd << ", hd_prev=" << hd_prev << ", line=" << p << " + "
-             << d << " * t, range=" << tmin << " - " << (tmax ? std::to_string(*tmax) : "inf") << std::endl;
+        vout << IO::level(3) << SOURCE_LOC << ": start: line=" << p << " + " << d << " * t, range=" << tmin << " - "
+             << (tmax ? std::to_string(*tmax) : "inf") << std::endl;
         auto hd0 = halfedge(fd, m.graph);
         for (auto hd : halfedges_around_face(hd0, m.graph)) {
             if (hd == hd_prev) continue;
@@ -1123,8 +1119,7 @@ class SSM_restricted_voronoi_diagram {
             hd_prev = opposite(hd, m.graph);
             fd = face(hd_prev, m.graph);
 
-            vout << IO::level(3) << SOURCE_LOC << ": end: found: t=" << ti << ", hd=" << hd << ", fd=" << fd
-                 << std::endl;
+            vout << IO::level(3) << SOURCE_LOC << ": end: found: t=" << ti << std::endl;
 
             return Cone_intersection{fd, hd_prev, ti};
         }
