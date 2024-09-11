@@ -1,5 +1,5 @@
-#ifndef INCLUDE_SSM_VORONOI_DIAGRAM_SSM_VORONOI_DIAGRAM_H
-#define INCLUDE_SSM_VORONOI_DIAGRAM_SSM_VORONOI_DIAGRAM_H
+#ifndef SSM_VORONOI_DIAGRAM_SSM_VORONOI_DIAGRAM_H
+#define SSM_VORONOI_DIAGRAM_SSM_VORONOI_DIAGRAM_H
 
 #include <CGAL/Default.h>
 #include <CGAL/Origin.h>
@@ -53,6 +53,14 @@ class SSM_voronoi_diagram {
         auto any_intersection(const Vector_2& d) { return _any_intersection(m_polygon, d); }
 
         auto any_intersected_edge(const Vector_2& d) { return _any_intersected_edge(m_polygon, d); }
+
+        Metric_edge_iterator next_edge(Metric_edge_iterator ed) const {
+            return ++ed == m_polygon.edges_end() ? m_polygon.edges_begin() : ed;
+        }
+
+        Metric_edge_iterator prev_edge(Metric_edge_iterator ed) const {
+            return ed == m_polygon.edges_begin() ? --m_polygon.edges_end() : --ed;
+        }
 
        private:
         Metric m_polygon;
@@ -158,6 +166,12 @@ class SSM_voronoi_diagram {
         bool is_valid() const { return is_infinite() || ts.size() == eds.size() + 1; }
 
         std::size_t num_cones() const { return eds.size(); }
+
+        std::size_t num_endpoints() const { return ts.size(); }
+
+        auto& edges() const { return eds; }
+
+        auto& endpoints() const { return ts; }
 
         FT t_min() const {
             CGAL_assertion(!empty());
@@ -324,8 +338,8 @@ class SSM_voronoi_diagram {
         return isect;
     }
 
-    auto find_segment_cone_intervals(Site_iterator site, const Parametric_line_2& segment, Segment_cone_intervals& res,
-                                     FT tmin, std::optional<FT> tmax = std::nullopt) {
+    auto find_intervals(Site_iterator site, const Parametric_line_2& segment, Segment_cone_intervals& res, FT tmin,
+                        std::optional<FT> tmax = std::nullopt) {
         res.clear();
 
         if (tmax && tmin > *tmax) return;
@@ -367,7 +381,7 @@ class SSM_voronoi_diagram {
                     res.add_intersection(ts);
 
                     next_cone_idx = 0;
-                    --ed0;
+                    ed0 = site->metric()->prev_edge(ed0);
                     res.add_edge(ed0);
                 }
             }
@@ -382,7 +396,7 @@ class SSM_voronoi_diagram {
                 return;
             }
 
-            if (std::holds_alternative<Colinear>(*isect0)) {
+            if (std::holds_alternative<Colinear>(*isect1)) {
                 // TODO: case 2.b, 2.c
                 CGAL_assertion(false);
             } else {
@@ -401,7 +415,7 @@ class SSM_voronoi_diagram {
                     res.add_intersection(ts);
 
                     next_cone_idx = 1;
-                    ++ed0;
+                    ed0 = site->metric()->next_edge(ed0);
                     res.add_edge(ed0);
                 }
             }
@@ -415,11 +429,11 @@ class SSM_voronoi_diagram {
             CGAL_assertion(ts > tmin && tr > 0);
             res.add_intersection(ts);
 
-            next_cone_idx == 0 ? --ed0 : ++ed0;
+            ed0 = next_cone_idx == 0 ? site->metric()->prev_edge(ed0) : site->metric()->next_edge(ed0);
             res.add_edge(ed0);
         }
         if (tmax) res.add_intersection(*tmax);
     }
 };
 }  // namespace CGAL::SSM_voronoi_diagram
-#endif  // INCLUDE_SSM_VORONOI_DIAGRAM_SSM_VORONOI_DIAGRAM_H
+#endif  // SSM_VORONOI_DIAGRAM_SSM_VORONOI_DIAGRAM_H
