@@ -172,7 +172,7 @@ class SSM_voronoi_diagram {
         Voronoi_diagram_vertex_index_pmap vertex_index_map;
         Vertex_info_map vertex_info_map;
 
-        Voronoi_diagram()
+        Voronoi_diagram(const Traits& traits)
             : vpm(get(vertex_point, graph)),
               vertex_index_map(get(vertex_index, graph)),
               vertex_info_map(get(Vertex_info_property{}, graph)) {}
@@ -643,6 +643,52 @@ class SSM_voronoi_diagram {
 
         return std::make_pair(k0, prev_vd);
     }
+
+    void trace_all_boundaries(Boundary_edge_iterator b_ed0, Boundary_vertex_info b_ed1, bool add_border_edges = true,
+                              bool add_cone_vertices = false) {
+        auto b_ed = b_ed0;
+        Cone_descriptor k0;
+        find_nearest_site(construct_source(*b_ed), k0);
+
+        vd_vertex_descriptor prev_vd = vd_graph_traits::null_vertex(), vd0;
+
+        for (; b_ed != b_ed1; ++b_ed) {
+            if (add_border_edges) {
+                auto v_vd = m_voronoi->add_vertex(construct_source(*b_ed), Boundary_vertex_info{b_ed, k0});
+                if (prev_vd != vd_graph_traits::null_vertex()) {
+                    m_voronoi->connect(prev_vd, v_vd, m_dummy_face, vd_graph_traits::null_face());
+                } else {
+                    vd0 = v_vd;
+                }
+                prev_vd = v_vd;
+            }
+            std::tie(k0, prev_vd) = trace_boundary(b_ed, k0, prev_vd, add_border_edges, add_cone_vertices, m_dummy_face,
+                                                   vd_graph_traits::null_face());
+        }
+        if (add_border_edges) {
+            m_voronoi->connect(prev_vd, vd0, m_dummy_face, vd_graph_traits::null_face());
+        }
+    }
+
+    void trace_all_boundaries(bool add_border_edges = true, bool add_cone_vertices = false) {
+        auto b_ed0 = m_boundary.edges_begin();
+        auto b_ed1 = m_boundary.edges_end();
+        trace_all_boundaries(b_ed0, b_ed1, add_border_edges, add_cone_vertices);
+    }
+
+    void reset() {
+        m_voronoi = std::make_shared<Voronoi_diagram>(m_traits);
+        m_dummy_face = add_face(m_voronoi->graph);
+
+        m_i_traces.clear();
+        m_i_vertices.clear();
+        m_b_vertices.clear();
+
+        // if (b_trace_timer.is_running()) b_trace_timer.stop();
+        // if (i_trace_timer.is_running()) i_trace_timer.stop();
+        // b_trace_timer.reset();
+        // i_trace_timer.reset();
+    }
 #pragma endregion
 
 #pragma region protected methods
@@ -656,6 +702,8 @@ class SSM_voronoi_diagram {
     std::deque<Internal_trace> m_i_traces;
     std::unordered_map<Internal_vertex_id, vd_vertex_descriptor, Internal_vertex_id_hash> m_i_vertices;
     std::unordered_multimap<Boundary_vertex_id, vd_vertex_descriptor, Boundary_vertex_id_hash> m_b_vertices;
+
+    vd_face_descriptor m_dummy_face;
 
     Intervals m_intervals_cache;
     std::vector<Intervals> m_intervals_vec_cache;
