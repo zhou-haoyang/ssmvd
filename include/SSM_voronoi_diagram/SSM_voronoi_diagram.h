@@ -2,12 +2,18 @@
 #define SSM_VORONOI_DIAGRAM_SSM_VORONOI_DIAGRAM_H
 
 #include <CGAL/Default.h>
+#include <CGAL/Dynamic_property_map.h>
 #include <CGAL/Origin.h>
 #include <CGAL/Polygon_2.h>
+#include <CGAL/enum.h>
+#include <CGAL/property_map.h>
 
+#include <boost/container_hash/hash.hpp>
 #include <boost/graph/graph_traits.hpp>
+#include <deque>
 #include <list>
 #include <optional>
+#include <unordered_map>
 #include <variant>
 
 #define TRAIT_FUNC(ret_type, name, functor)                  \
@@ -32,6 +38,7 @@
 namespace CGAL::SSM_voronoi_diagram {
 template <class Traits, class VoronoiDiagramVertexPointPMap = Default, class VoronoiDiagramVertexIndexPMap = Default>
 class SSM_voronoi_diagram {
+#pragma region public types
    public:
     using FT = typename Traits::FT;
     using Point_2 = typename Traits::Point_2;
@@ -54,6 +61,8 @@ class SSM_voronoi_diagram {
         auto any_intersection(const Vector_2& d) { return _any_intersection(m_polygon, d); }
 
         auto any_intersected_edge(const Vector_2& d) { return _any_intersected_edge(m_polygon, d); }
+
+        auto index(Metric_edge_iterator ed) const { return std::distance(m_polygon.edges_begin(), ed); }
 
         Metric_edge_iterator next_edge(Metric_edge_iterator ed) const {
             return ++ed == m_polygon.edges_end() ? m_polygon.edges_begin() : ed;
@@ -101,14 +110,238 @@ class SSM_voronoi_diagram {
         Metric_edge_iterator m_edge;
     };
 
-    using Voronoi_diagram = typename Traits::Voronoi_diagram;
-    using vd_graph_traits = typename boost::graph_traits<Voronoi_diagram>;
+    using Boundary = Polygon_2;
+    using Boundary_edge_iterator = typename Boundary::Edge_const_iterator;
+
+    using Voronoi_diagram_graph = typename Traits::Voronoi_diagram;
+    using vd_graph_traits = typename boost::graph_traits<Voronoi_diagram_graph>;
     using vd_vertex_descriptor = typename vd_graph_traits::vertex_descriptor;
     using vd_edge_descriptor = typename vd_graph_traits::edge_descriptor;
     using vd_halfedge_descriptor = typename vd_graph_traits::halfedge_descriptor;
     using vd_face_descriptor = typename vd_graph_traits::face_descriptor;
 
+    enum Vertex_type : std::size_t {
+        BOUNDARY,
+        BOUNDARY_CONE,
+        BOUNDARY_BISECTOR,
+        TWO_SITE_BISECTOR,
+        THREE_SITE_BISECTOR,
+    };
+
+    struct Boundary_vertex_info {
+        Boundary_edge_iterator ed;
+        Cone_descriptor k;
+    };
+
+    struct Boundary_cone_info {
+        Boundary_edge_iterator ed;
+        Cone_descriptor k;
+    };
+
+    struct Boundary_bisector_info {
+        Boundary_edge_iterator ed;
+        Cone_descriptor k0, k1;
+    };
+
+    struct Two_site_bisector_info {
+        Cone_descriptor k0;
+        Site_iterator c1;
+        Metric_edge_iterator e1;
+    };
+
+    struct Three_site_bisector_info {
+        Cone_descriptor k0, k1, k2;
+    };
+
+    using Vertex_info = std::variant<Boundary_vertex_info, Boundary_cone_info, Boundary_bisector_info,
+                                     Two_site_bisector_info, Three_site_bisector_info>;
+
+    using Voronoi_diagram_vertex_point_pmap =
+        typename Default::Get<VoronoiDiagramVertexPointPMap,
+                              typename boost::property_map<Voronoi_diagram_graph, vertex_point_t>::const_type>::type;
+    using Voronoi_diagram_vertex_index_pmap =
+        typename Default::Get<VoronoiDiagramVertexIndexPMap,
+                              typename boost::property_map<Voronoi_diagram_graph, vertex_index_t>::const_type>::type;
+
+    struct Voronoi_diagram {
+        using Vertex_info_property = CGAL::dynamic_vertex_property_t<Vertex_info>;
+        using Vertex_info_map = typename boost::property_map<Voronoi_diagram_graph, Vertex_info_property>::type;
+
+        Voronoi_diagram_graph graph;
+        Voronoi_diagram_vertex_point_pmap vpm;
+        Voronoi_diagram_vertex_index_pmap vertex_index_map;
+        Vertex_info_map vertex_info_map;
+
+        Voronoi_diagram()
+            : vpm(get(vertex_point, graph)),
+              vertex_index_map(get(vertex_index, graph)),
+              vertex_info_map(get(Vertex_info_property{}, graph)) {}
+
+        /**
+         * @brief The copy constructor is deleted to avoid the property map ownership issue.
+         */
+        Voronoi_diagram(const Voronoi_diagram&) = delete;
+
+        vd_vertex_descriptor add_vertex(const Point_2& p, const Vertex_info& info) {
+            auto vd = CGAL::add_vertex(graph);
+            put(vpm, vd, p);
+            // put(vertex_index_map, vd, num_vertices(graph) - 1);
+            put(vertex_info_map, vd, info);
+            return vd;
+        }
+
+        void insert_halfedge_loop(vd_halfedge_descriptor hd) {
+            auto vt = target(hd, graph), vs = source(hd, graph);
+            auto hd_cur = halfedge(vt, graph);
+            if (hd_cur == vd_graph_traits::null_halfedge()) {
+                set_halfedge(vt, hd, graph);
+                return;
+            }
+
+            if (hd_cur != opposite(next(hd_cur, graph), graph)) {
+                // At least 2 halfedges around the target vertex
+                auto pt = get(vpm, vt), ps = get(vpm, vs);
+                auto v = ps - pt;
+
+                auto v_cur = normalized(get(vpm, source(hd_cur, graph)) - pt);
+
+                for (;;) {
+                    auto hd_next = opposite(next(hd_cur, graph), graph);
+                    auto v_next = normalized(get(vpm, source(hd_next, graph)) - pt);
+
+                    // A monotonic angle function in [-2, 2]
+                    auto angle = [this](const auto& v1, const auto& v2) {
+                        auto cos_theta = scalar_product(v1, v2);
+                        auto ori = orientation(v1, v2);
+                        if (ori == ZERO) {
+                            return cos_theta < 0 ? cos_theta + 1 : -cos_theta - 1;
+                        } else {
+                            // The halfedge loop around the vertex should be clockwise for the halfedge loop around the
+                            // face to be counter-clockwise, hence the normal should point inward here
+                            return ori == POSITIVE ? cos_theta + 1 : -cos_theta - 1;
+                        }
+                    };
+
+                    if (angle(v_cur, v) < angle(v_cur, v_next)) break;
+
+                    hd_cur = hd_next;
+                    v_cur = v_next;
+                }
+            }
+
+            set_next(hd, next(hd_cur, graph), graph);
+            set_next(hd_cur, opposite(hd, graph), graph);
+        }
+
+        vd_halfedge_descriptor connect(vd_vertex_descriptor v0, vd_vertex_descriptor v1, vd_face_descriptor fd01,
+                                       vd_face_descriptor fd10) {
+            if (halfedge(v1, graph) != vd_graph_traits::null_halfedge()) {
+                for (auto hd : halfedges_around_target(v1, graph)) {
+                    if (source(hd, graph) == v0) return hd;
+                }
+            }
+
+            auto ed = CGAL::add_edge(graph);
+            auto hd01 = halfedge(ed, graph);
+            auto hd10 = opposite(hd01, graph);
+            set_target(hd01, v1, graph);
+            set_target(hd10, v0, graph);
+            set_next(hd01, hd10, graph);
+            set_next(hd10, hd01, graph);
+            insert_halfedge_loop(hd10);
+            insert_halfedge_loop(hd01);
+
+            set_face(hd01, fd01, graph);
+            set_face(hd10, fd10, graph);
+            return hd01;
+        }
+
+       protected:
+        TRAIT_FUNC(FT, scalar_product, compute_scalar_product_2_object)
+        TRAIT_FUNC(Orientation, orientation, orientation_2_object)
+
+        const Traits& m_traits;
+    };
+
+    using Voronoi_diagram_ptr = std::shared_ptr<Voronoi_diagram>;
+    using Const_voronoi_diagram_ptr = std::shared_ptr<const Voronoi_diagram>;
+#pragma endregion
+
+#pragma region protected types
    protected:
+    using index_t = std::ptrdiff_t;
+
+    struct Cone_index {
+        index_t site_idx, edge_idx;
+
+        Cone_index(index_t site_idx, index_t edge_idx) : site_idx(site_idx), edge_idx(edge_idx) {}
+
+        bool operator==(const Cone_index& other) const {
+            return site_idx == other.site_idx && edge_idx == other.edge_idx;
+        }
+
+        bool operator>(const Cone_index& other) const {
+            return site_idx > other.site_idx || (site_idx == other.site_idx && edge_idx > other.edge_idx);
+        }
+    };
+
+    struct Cone_index_hash {
+        std::size_t operator()(const Cone_index& k) const {
+            std::size_t seed = 0;
+            boost::hash_combine(seed, k.site_idx);
+            boost::hash_combine(seed, k.edge_idx);
+            return seed;
+        }
+    };
+
+    struct Internal_vertex_id {
+        Cone_index k0, k1, k2;
+
+        Internal_vertex_id(Cone_index ci0, Cone_index ci1, Cone_index ci2) : k0(ci0), k1(ci1), k2(ci2) {
+            if (k0 > k1) std::swap(k0, k1);
+            if (k1 > k2) std::swap(k1, k2);
+            if (k0 > k1) std::swap(k0, k1);
+        }
+
+        bool operator==(const Internal_vertex_id& other) const {
+            return k0 == other.k0 && k1 == other.k1 && k2 == other.k2;
+        }
+    };
+
+    struct Internal_vertex_id_hash {
+        std::size_t operator()(const Internal_vertex_id& v) const {
+            std::size_t seed = 0;
+            boost::hash_combine(seed, Cone_index_hash{}(v.k0));
+            boost::hash_combine(seed, Cone_index_hash{}(v.k1));
+            boost::hash_combine(seed, Cone_index_hash{}(v.k2));
+            return seed;
+        }
+    };
+
+    struct Boundary_vertex_id {
+        Cone_index k0, k1;
+
+        Boundary_vertex_id(Cone_index ci0, Cone_index ci1) : k0(ci0), k1(ci1) {
+            if (k0 > k1) std::swap(k0, k1);
+        }
+
+        bool operator==(const Boundary_vertex_id& other) const { return k0 == other.k0 && k1 == other.k1; }
+
+        friend std::ostream& operator<<(std::ostream& os, const Boundary_vertex_id& v) {
+            os << "Boundary(" << v.k0 << ", " << v.k1 << ", E" << v.mesh_halfedge_idx << ")";
+            return os;
+        }
+    };
+
+    struct Boundary_vertex_id_hash {
+        std::size_t operator()(const Boundary_vertex_id& v) const {
+            std::size_t seed = 0;
+            boost::hash_combine(seed, Cone_index_hash{}(v.k0));
+            boost::hash_combine(seed, Cone_index_hash{}(v.k1));
+            return seed;
+        }
+    };
+
     struct Cone_line_intersection {
         FT tmin;
         std::optional<FT> tmax;
@@ -250,6 +483,24 @@ class SSM_voronoi_diagram {
         // mutable std::unordered_map<Metric_edge_iterator, size_t> idx_map;
     };
 
+    struct Internal_trace {
+        Parametric_line_2 bisector;
+        Cone_descriptor k0, k1, k_prev;
+        vd_vertex_descriptor v_prev;
+
+        Internal_trace(Parametric_line_2 bi, Cone_descriptor k0, Cone_descriptor k1, Cone_descriptor k_prev,
+                       vd_vertex_descriptor v_prev)
+            : bisector(std::move(bi)),
+              k0(std::move(k0)),
+              k1(std::move(k1)),
+              k_prev(std::move(k_prev)),
+              v_prev(v_prev) {}
+    };
+
+#pragma endregion
+
+#pragma region public methods
+   public:
     SSM_voronoi_diagram(const Polygon_2& boundary, Traits traits = {})
         : m_boundary(boundary), m_traits(std::move(traits)) {}
 
@@ -278,11 +529,11 @@ class SSM_voronoi_diagram {
         return d_min;
     }
 
-    auto trace_boundary(Metric_edge_iterator ed, Cone_descriptor k0, vd_vertex_descriptor prev_vd,
+    auto trace_boundary(Boundary_edge_iterator b_ed, Cone_descriptor k0, vd_vertex_descriptor prev_vd,
                         bool add_border_edges = false, bool add_cone_vertices = false,
                         vd_face_descriptor fd0 = vd_graph_traits::null_face(),
                         vd_face_descriptor fd1 = vd_graph_traits::null_face()) {
-        auto b_line = construct_parametric_line(*ed);
+        auto b_line = construct_parametric_line(*b_ed);
         FT tmin = 0, tmax = 1;
 
         // Intervals of boundary segment clipped by cones of all sites
@@ -297,7 +548,7 @@ class SSM_voronoi_diagram {
             // Find the nearest two site bisector
             FT dist_min, tb_min;
             Line_2 bi_line_min;
-            std::vector<Cone_descriptor> k1_min;
+            Cone_descriptor k1_min;
             bool found = false;
             for (auto site_it = m_sites.begin(); site_it != m_sites.end(); ++site_it) {
                 if (site_it == k0.site()) continue;
@@ -328,29 +579,83 @@ class SSM_voronoi_diagram {
                         dist_min = dist;
                         tb_min = tb;
                         bi_line_min = bi_line;
-                        k1_min.clear();
-                        k1_min.push_back(k1);
+                        k1_min = k1;
                         found = true;
                         break;  // goto next site
                     } else if (dist == dist_min) {
-                        k1_min.push_back(k1);
+                        CGAL_assertion_msg(false, "TODO: handle multiple bisectors");
                     }
                 }
             }
 
-            if (!found) {
-                // No intersection found
+            if (found) {
+                // Found a bisector
+                auto& k1 = k1_min;
+                Boundary_vertex_id v_id(cone_index(k0), cone_index(k1));
 
+                Point_2 p = construct_point_on(b_line, tb_min);
+                auto v_vd = m_voronoi->add_vertex(p, Boundary_bisector_info{b_ed, k0, k1});
+                if (add_border_edges && prev_vd != vd_graph_traits::null_vertex()) {
+                    m_voronoi->connect(prev_vd, v_vd, fd0, fd1);
+                }
+                prev_vd = v_vd;
+
+                Vector_2 d = construct_vector(bi_line_min);
+                if (orientation(construct_vector(b_line), d) == RIGHT_TURN) {
+                    d = opposite_vector(d);
+                }
+                auto bisector = construct_parametric_line(p, d);
+                m_i_traces.emplace_back(bisector, k0, k1, k_prev, v_vd);
+
+                // Switch current cone to k1
+                k_prev = k0;
+                k0 = k1;
+                tmin = tb_min;
+
+                auto& intervals = intervals_map[k0.site()];
+                interval_it = intervals.find_cone(k0.edge());
+                CGAL_assertion(interval_it != intervals.end());
             } else {
+                // No bisector found, terminate if this is the last interval
+                interval_it++;
+                auto& intervals = intervals_map[k0.site()];
+                if (interval_it == intervals.end()) {
+                    break;
+                }
+
+                // Otherwise there is a boundary-cone intersection
+                // Otherwise switch to the next cone
+                auto [m_ed, isect] = *interval_it;
+                if (add_cone_vertices) {
+                    Point_2 p = construct_point_on(b_line, isect.t_min);
+                    auto v_vd = m_voronoi->add_vertex(p, Boundary_cone_info{b_ed, k0});
+                    if (add_border_edges && prev_vd != vd_graph_traits::null_vertex()) {
+                        m_voronoi->connect(prev_vd, v_vd, fd0, fd1);
+                    }
+                    prev_vd = v_vd;
+                }
+
+                k_prev = k0;
+                k0.set_edge(m_ed);
+                tmin = isect.tmin;
             }
         }
-    }
 
+        return std::make_pair(k0, prev_vd);
+    }
+#pragma endregion
+
+#pragma region protected methods
    protected:
     const Polygon_2& m_boundary;
     Metric_list m_metrics;
     Site_list m_sites;
     Traits m_traits;
+    Voronoi_diagram_ptr m_voronoi;
+
+    std::deque<Internal_trace> m_i_traces;
+    std::unordered_map<Internal_vertex_id, vd_vertex_descriptor, Internal_vertex_id_hash> m_i_vertices;
+    std::unordered_multimap<Boundary_vertex_id, vd_vertex_descriptor, Boundary_vertex_id_hash> m_b_vertices;
 
     Intervals m_intervals_cache;
     std::vector<Intervals> m_intervals_vec_cache;
@@ -362,6 +667,7 @@ class SSM_voronoi_diagram {
     TRAIT_FUNC(Point_2, construct_target, construct_target_2_object)
     TRAIT_FUNC(Parametric_line_2, construct_parametric_line, construct_parametric_line_2_object)
     TRAIT_FUNC(Line_2, construct_line, construct_line_2_object)
+    TRAIT_FUNC(Vector_2, opposite_vector, construct_opposite_vector_2_object)
 
     TRAIT_FUNC(FT, squared_distance, compute_squared_distance_2_object)
     TRAIT_FUNC(FT, determinant, compute_determinant_2_object)
@@ -382,6 +688,10 @@ class SSM_voronoi_diagram {
     using Parametric_line_intersection = std::variant<std::pair<FT, FT>, Colinear>;
 
     std::size_t site_index(Site_iterator site) const { return std::distance(m_sites.begin(), site); }
+
+    Cone_index cone_index(Cone_descriptor k) const {
+        return Cone_index(site_index(k.site()), k.site()->metric()->index(k.edge()));
+    }
 
     /**
      * @brief Find the intersection of a parametric line with a ray with direction d and starting at the origin.
@@ -534,5 +844,6 @@ class SSM_voronoi_diagram {
         return construct_line(cx(AB), cy(AB), C);
     }
 };
+#pragma endregion
 }  // namespace CGAL::SSM_voronoi_diagram
 #endif  // SSM_VORONOI_DIAGRAM_SSM_VORONOI_DIAGRAM_H
