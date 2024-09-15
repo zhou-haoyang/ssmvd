@@ -7,6 +7,8 @@
 
 #include <gtest/gtest.h>
 #include <optional>
+#include <variant>
+#include <vector>
 
 namespace VD = CGAL::SSM_voronoi_diagram;
 
@@ -32,56 +34,68 @@ class SSM_voronoi_diagram_test : public SSM_voronoi_diagram, public ::testing::T
         metric.push_back(Point_2(-1, 0));
         add_site(Point_2(1, 1), add_metric(std::move(metric)));
     }
+
+    std::vector<FT> find_interval_endpoints(Site_iterator site, const Parametric_line_2 &segment, FT tmin,
+                                            std::optional<FT> tmax = std::nullopt) {
+        if (tmax && *tmax < tmin) return {};
+
+        auto p = construct_vector(site->point(), construct_point(segment));
+        auto d = construct_vector(segment);
+        std::vector<FT> res{tmin};
+        for (auto edge : site->metric()->polygon().edges()) {
+            auto isect = intersect(p, d, construct_vector(CGAL::ORIGIN, construct_source(edge)), tmin, tmax);
+            if (isect && !std::holds_alternative<Colinear>(*isect)) {
+                auto [t, _] = std::get<std::pair<FT, FT>>(*isect);
+                res.push_back(t);
+            }
+        }
+        if (tmax) {
+            res.push_back(*tmax);
+        }
+        std::sort(res.begin(), res.end());
+        return res;
+    }
+
+    void check_interval_endpoints(Site_iterator site, const Parametric_line_2 &segment, FT tmin,
+                                  std::optional<FT> tmax = std::nullopt) {
+        Intervals res;
+        find_intervals(site, segment, res, tmin, tmax);
+        auto endpoints = find_interval_endpoints(site, segment, tmin, tmax);
+        EXPECT_EQ(res.num_endpoints(), endpoints.size());
+        auto it = res.endpoints().begin();
+        for (auto t : endpoints) {
+            EXPECT_FLOAT_EQ(*it, t);
+            ++it;
+        }
+    }
 };
 
 TEST_F(SSM_voronoi_diagram_test, Empty_intervals) {
-    Segment_cone_intervals res;
-    find_segment_cone_intervals(m_sites.begin(), Parametric_line_2(Point_2(0, 0), Point_2(2, 0)), res, 1, 0);
-    EXPECT_TRUE(res.empty());
+    Intervals res;
+    check_interval_endpoints(m_sites.begin(), Parametric_line_2(Point_2(0, 0), Point_2(2, 0)), 1, 0);
 }
 
 TEST_F(SSM_voronoi_diagram_test, One_interval) {
-    Segment_cone_intervals res;
-    find_segment_cone_intervals(m_sites.begin(), Parametric_line_2(Point_2(0, 0), Point_2(2, 0)), res, 0, 0.4);
-    EXPECT_TRUE(res.num_cones() == 1);
+    Intervals res;
+    check_interval_endpoints(m_sites.begin(), Parametric_line_2(Point_2(0, 0), Point_2(2, 0)), 0, 0.4);
 }
 
 TEST_F(SSM_voronoi_diagram_test, One_interval_ray) {
-    Segment_cone_intervals res;
-    find_segment_cone_intervals(m_sites.begin(), Parametric_line_2(Point_2(0, 0), Point_2(-1, -1)), res, 0);
-    EXPECT_TRUE(res.num_cones() == 1);
+    Intervals res;
+    check_interval_endpoints(m_sites.begin(), Parametric_line_2(Point_2(0, 0), Point_2(-1, -1)), 0);
 }
 
 TEST_F(SSM_voronoi_diagram_test, Two_intervals) {
-    Segment_cone_intervals res;
-    find_segment_cone_intervals(m_sites.begin(), Parametric_line_2(Point_2(0, 0), Point_2(2, 0)), res, 0, 1);
-    EXPECT_TRUE(res.num_cones() == 2);
-    auto it = res.begin();
-    EXPECT_TRUE((*it).second.tmin == 0);
-    EXPECT_TRUE((*it++).second.tmax == 0.5);
-    EXPECT_TRUE((*it).second.tmin == 0.5);
-    EXPECT_TRUE((*it).second.tmax == 1);
+    Intervals res;
+    check_interval_endpoints(m_sites.begin(), Parametric_line_2(Point_2(0, 0), Point_2(2, 0)), 0, 1);
 }
 
 TEST_F(SSM_voronoi_diagram_test, Two_intervals_ray) {
-    Segment_cone_intervals res;
-    find_segment_cone_intervals(m_sites.begin(), Parametric_line_2(Point_2(0, 0), Point_2(2, 0)), res, 0);
-    EXPECT_TRUE(res.num_cones() == 2);
-    EXPECT_TRUE(res.is_infinite());
-    auto it = res.begin();
-    EXPECT_TRUE((*it).second.tmin == 0);
-    EXPECT_TRUE((*it++).second.tmax == 0.5);
-    EXPECT_TRUE((*it).second.tmin == 0.5);
-    EXPECT_TRUE((*it).second.tmax == std::nullopt);
+    Intervals res;
+    check_interval_endpoints(m_sites.begin(), Parametric_line_2(Point_2(0, 0), Point_2(2, 0)), 0);
 }
 
 TEST_F(SSM_voronoi_diagram_test, Two_intervals_ccw) {
-    Segment_cone_intervals res;
-    find_segment_cone_intervals(m_sites.begin(), Parametric_line_2(Point_2(0, 0), Point_2(0, 2)), res, 0, 1);
-    EXPECT_TRUE(res.num_cones() == 2);
-    auto it = res.begin();
-    EXPECT_TRUE((*it).second.tmin == 0);
-    EXPECT_TRUE((*it++).second.tmax == 0.5);
-    EXPECT_TRUE((*it).second.tmin == 0.5);
-    EXPECT_TRUE((*it).second.tmax == 1);
+    Intervals res;
+    check_interval_endpoints(m_sites.begin(), Parametric_line_2(Point_2(0, 0), Point_2(0, 2)), 0, 1);
 }
