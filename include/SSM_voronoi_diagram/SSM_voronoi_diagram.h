@@ -483,18 +483,25 @@ class SSM_voronoi_diagram {
         // mutable std::unordered_map<Metric_edge_iterator, size_t> idx_map;
     };
 
+    enum Endpoint_type { CCW = 1, SITE = 0, CW = -1, UNKNOWN = -2 };
+
     struct Internal_trace {
         Parametric_line_2 bisector;
-        Cone_descriptor k0, k1, k_prev;
-        vd_vertex_descriptor v_prev;
+        Cone_descriptor k0, k1;
+        std::optional<Cone_descriptor> k_prev;
+        Endpoint_type prev_type;
+        vd_vertex_descriptor v_vd;
 
-        Internal_trace(Parametric_line_2 bi, Cone_descriptor k0, Cone_descriptor k1, Cone_descriptor k_prev,
-                       vd_vertex_descriptor v_prev)
-            : bisector(std::move(bi)),
-              k0(std::move(k0)),
-              k1(std::move(k1)),
-              k_prev(std::move(k_prev)),
-              v_prev(v_prev) {}
+        Internal_trace(Parametric_line_2 bi, Cone_descriptor k0, Cone_descriptor k1,
+                       std::optional<Cone_descriptor> k_prev, vd_vertex_descriptor v_prev)
+            : bisector(std::move(bi)), k0(std::move(k0)), k1(std::move(k1)), k_prev(std::move(k_prev)), v_vd(v_prev) {}
+    };
+
+    struct Boundary_trace {
+        vd_vertex_descriptor v_vd;
+        Parametric_line_2 b_line;
+
+        Boundary_trace(vd_vertex_descriptor v, Parametric_line_2 b) : v_vd(v), b_line(std::move(b)) {}
     };
 
 #pragma endregion
@@ -605,7 +612,7 @@ class SSM_voronoi_diagram {
                     d = opposite_vector(d);
                 }
                 auto bisector = construct_parametric_line(p, d);
-                m_i_traces.emplace_back(bisector, k0, k1, k_prev, v_vd);
+                m_i_traces.emplace_back(bisector, k0, k1, std::nullopt, v_vd);
 
                 // Switch current cone to k1
                 k_prev = k0;
@@ -682,12 +689,44 @@ class SSM_voronoi_diagram {
 
         m_i_traces.clear();
         m_i_vertices.clear();
-        m_b_vertices.clear();
+        m_b_traces.clear();
 
         // if (b_trace_timer.is_running()) b_trace_timer.stop();
         // if (i_trace_timer.is_running()) i_trace_timer.stop();
         // b_trace_timer.reset();
         // i_trace_timer.reset();
+    }
+
+    bool step() {
+        if (m_i_traces.empty()) {
+            return false;
+        }
+        auto tr = std::move(m_i_traces.front());  // DFS
+        m_i_traces.pop_front();
+        // i_trace_timer.start();
+        process_i_trace(tr);
+        // i_trace_timer.stop();
+        return true;
+    }
+
+    void build(bool add_border_edges = true, bool add_cone_vertices = false) {
+        reset();
+        trace_all_boundaries(add_border_edges, add_cone_vertices);
+        bool stat;
+        do {
+            stat = step();
+        } while (stat);
+        trace_faces();
+        CGAL_postcondition(is_valid_face_graph(m_voronoi->graph, true));
+
+        // vout << IO::level(1) << "profiling: boundary trace: count = " << b_trace_timer.intervals()
+        //      << ", time = " << b_trace_timer.time() << "s, speed = " << b_trace_timer.time() /
+        //      b_trace_timer.intervals()
+        //      << "s/trace" << std::endl;
+        // vout << IO::level(1) << "profiling: internal trace: count = " << i_trace_timer.intervals()
+        //      << ", time = " << i_trace_timer.time() << "s, speed = " << i_trace_timer.time() /
+        //      i_trace_timer.intervals()
+        //      << "s/trace" << std::endl;
     }
 #pragma endregion
 
@@ -701,7 +740,7 @@ class SSM_voronoi_diagram {
 
     std::deque<Internal_trace> m_i_traces;
     std::unordered_map<Internal_vertex_id, vd_vertex_descriptor, Internal_vertex_id_hash> m_i_vertices;
-    std::unordered_multimap<Boundary_vertex_id, vd_vertex_descriptor, Boundary_vertex_id_hash> m_b_vertices;
+    std::unordered_multimap<Boundary_vertex_id, Boundary_trace, Boundary_vertex_id_hash> m_b_traces;
 
     vd_face_descriptor m_dummy_face;
 
@@ -775,6 +814,50 @@ class SSM_voronoi_diagram {
         return isect;
     }
 
+    struct Next_interval_info {
+        Cone_descriptor k_next;
+        FT ts;
+        Endpoint_type type;
+    };
+
+    auto find_next_interval(Cone_descriptor k_cur, const Parametric_line_2& segment, Endpoint_type prev_type, FT tmin,
+                            std::optional<FT> tmax = std::nullopt) {
+        if (prev_type == SITE) {
+            return std::nullopt;
+        }
+
+        auto p = construct_vector(k_cur.site()->point(), construct_point(segment));
+        auto d = construct_vector(segment);
+
+        auto process_isect = [&](const auto& isect, Endpoint_type type) -> std::optional<Next_interval_info> {
+            if (!isect) return std::nullopt;
+            if (std::holds_alternative<Colinear>(*isect)) {
+                CGAL_assertion_msg(false, "TODO: case 2.b, 2.c");
+            }
+            auto [ts, tr] = std::get<std::pair<FT, FT>>(*isect);
+            if (is_zero(ts)) {
+                CGAL_assertion_msg(false, "TODO: case 2.a");
+            } else if (is_zero(tr)) {
+                CGAL_assertion_msg(false, "TODO: case 1.b");
+            } else {
+                auto next_edge = type == CCW ? k_cur.site()->metric()->next_edge(k_cur.edge())
+                                             : k_cur.site()->metric()->prev_edge(k_cur.edge());
+                return Next_interval_info{Cone_descriptor(k_cur.site(), next_edge), ts, type};
+            }
+        };
+
+        if (prev_type == CW || prev_type == UNKNOWN) {
+            auto isect_next = intersect(p, d, construct_vector(ORIGIN, construct_source(*k_cur.edge())), tmin, tmax);
+            auto res = process_isect(isect_next, CW);
+            if (res)
+                return res;
+            else if (prev_type == CW)
+                return std::nullopt;
+        }
+
+        auto isect_next = intersect(p, d, construct_vector(ORIGIN, construct_target(*k_cur.edge())), tmin, tmax);
+        return process_isect(isect_next, CCW);
+    }
     auto find_intervals(Site_iterator site, const Parametric_line_2& segment, Intervals& res, FT tmin,
                         std::optional<FT> tmax = std::nullopt) {
         res.clear();
@@ -890,6 +973,160 @@ class SSM_voronoi_diagram {
         FT C = scalar_product(nd1, construct_vector(ORIGIN, k0.site()->point())) -
                scalar_product(nd0, construct_vector(ORIGIN, k1.site()->point()));
         return construct_line(cx(AB), cy(AB), C);
+    }
+
+    void process_i_trace(const Internal_trace& tr) {
+        FT tmin = 0;
+
+        // Clip the bisector with the cone k0 and k1
+        int next_cone_idx = -1;
+        std::optional<Next_interval_info> k_next_info;
+        auto info0 = find_next_interval(tr.k0, tr.bisector, tr.k_prev == tr.k0 ? tr.prev_type : UNKNOWN, tmin);
+        auto info1 = find_next_interval(tr.k1, tr.bisector, tr.k_prev == tr.k1 ? tr.prev_type : UNKNOWN, tmin);
+        if (info0) {
+            k_next_info = info0;
+            next_cone_idx = 0;
+        }
+        if (info1 && (!k_next_info || info1->t < k_next_info->ts)) {
+            k_next_info = info1;
+            next_cone_idx = 1;
+        }
+
+        std::optional<FT> tmax;
+        if (k_next_info) tmax = k_next_info->ts;
+
+        // Clip the bisector with the boundary
+        Boundary_vertex_id v_id(cone_index(tr.k0), cone_index(tr.k1));
+        vd_vertex_descriptor b_vd = vd_graph_traits::null_vertex();
+        FT b_dist_min;
+        auto [it_begin, it_end] = m_b_traces.equal_range(v_id);
+        for (auto it = it_begin; it != it_end; ++it) {
+            auto& b_trace = it->second;
+            auto isect = intersect(tr.bisector, b_trace.b_line);
+            if (!isect || std::holds_alternative<Colinear>(*isect)) continue;
+
+            auto [ts, tb] = std::get<std::pair<FT, FT>>(*isect);
+            if (ts < tmin || (tmax && ts >= *tmax)) continue;
+
+            FT dist = ts - tmin;
+            if (dist < b_dist_min || b_vd == vd_graph_traits::null_vertex()) {
+                b_dist_min = dist;
+                b_vd = b_trace.v_vd;
+                tmax = ts;
+            }
+        }
+
+        // Find the nearest three site bisector
+        FT dist_min, tb_min;
+        Line_2 bi_line_min;
+        Cone_descriptor k2_min;
+        bool found = false;
+        for (auto site_it = m_sites.begin(); site_it != m_sites.end(); ++site_it) {
+            if (site_it == tr.k0.site() || site_it == tr.k1.site()) continue;
+
+            find_intervals(site_it, tr.bisector, m_intervals_cache, tmin, tmax);
+            auto& intervals = m_intervals_cache;
+
+            for (auto [ed, interval_overlap] : intervals) {
+                Cone_descriptor k2(site_it, ed);
+                if (k2 == tr.k_prev) continue;
+
+                Line_2 bi_line = get_bisector(tr.k0, k2);
+                if (is_degenerate(bi_line)) continue;
+
+                auto isect = intersect(tr.bisector, bi_line);
+                if (!isect || std::holds_alternative<Colinear>(*isect)) continue;
+
+                FT tb = std::get<FT>(*isect);
+                if (tb <= interval_overlap.tmin() || tb > interval_overlap.tmax()) continue;
+
+                FT dist = tb - tmin;
+                CGAL_assertion_msg(dist >= 0, "Intersection must be on the segment");
+                if (dist < dist_min || !found) {
+                    dist_min = dist;
+                    tb_min = tb;
+                    bi_line_min = bi_line;
+                    k2_min = k2;
+                    found = true;
+                    break;
+                } else if (dist == dist_min) {
+                    CGAL_assertion_msg(false, "TODO: handle multiple bisectors");
+                }
+            }
+        }
+
+        if (found) {
+            // Found a 3-site bisector
+            Internal_vertex_id vid(cone_index(tr.k0), cone_index(tr.k1), cone_index(k2_min));
+            if (auto vd_it = m_i_vertices.find(vid); vd_it != m_i_vertices.cend()) {
+                m_voronoi->connect(tr.v_vd, vd_it->second, m_dummy_face, m_dummy_face);
+                return;
+            }
+
+            Point_2 p = construct_point_on(tr.bisector, tb_min);
+            auto v_vd = m_voronoi->add_vertex(p, Three_site_bisector_info{tr.k0, tr.k1, k2_min});
+            m_voronoi->connect(tr.v_vd, v_vd, m_dummy_face, m_dummy_face);
+            m_i_vertices.emplace(vid, v_vd);
+
+            auto d_02 = construct_vector(bi_line_min);
+            Line_2 l0 = construct_line(*(tr.k0.edge())), l1 = construct_line(*(tr.k1.edge()));
+            if (is_negative(
+                    scalar_product(d_02, orthogonal_vertor(l1) / abs(cc(l1)) - orthogonal_vector(l0) / abs(cc(l0))))) {
+                d_02 = opposite_vector(d_02);
+            }
+            auto bisector_02 = construct_parametric_line(p, d_02);
+            m_i_traces.emplace_back(bisector_02, tr.k0, k2_min, tr.k1, v_vd);
+
+            auto bisector_line_12 = get_bisector(tr.k1, k2_min);
+            auto d_12 = construct_vector(bisector_line_12);
+            if (is_negative(
+                    scalar_product(d_12, orthogonal_vertor(l0) / abs(cc(l0)) - orthogonal_vector(l1) / abs(cc(l1))))) {
+                d_12 = opposite_vector(d_12);
+            }
+            auto bisector_12 = construct_parametric_line(p, d_12);
+            m_i_traces.emplace_back(bisector_12, tr.k1, k2_min, tr.k0, v_vd);
+        } else if (b_vd != vd_graph_traits::null_vertex()) {
+            // Bisector intersects with the boundary
+            m_voronoi->connect(tr.v_vd, b_vd, m_dummy_face, m_dummy_face);
+        } else if (k_next_info) {
+            // Found a 2-site bisector
+            auto k0_next = next_cone_idx == 0 ? tr.k1 : tr.k0;
+            auto k1_prev = next_cone_idx == 0 ? tr.k0 : tr.k1;
+            Cone_descriptor k1_next = k_next_info->k_next;
+            Internal_vertex_id v_id(cone_index(k0_next), cone_index(k1_prev), cone_index(k1_next));
+            if (auto vd_it = m_i_vertices.find(v_id); vd_it != m_i_vertices.cend()) {
+                m_voronoi->connect(tr.v_vd, vd_it->second, m_dummy_face, m_dummy_face);
+                return;
+            }
+
+            Point_2 p = construct_point_on(tr.bisector, k_next_info->ts);
+            auto v_vd = m_voronoi->add_vertex(p, Two_site_bisector_info{k0_next, k1_prev, k1_next});
+            m_voronoi->connect(tr.v_vd, v_vd, m_dummy_face, m_dummy_face);
+            m_i_vertices.emplace(v_id, v_vd);
+
+            auto d = construct_vector(get_bisector(k0_next, k1_next));
+            auto m = k_next_info->type == CCW ? construct_target(k1_prev.edge()) : construct_source(k1_prev.edge());
+            auto md = construct_vector(ORIGIN, m);
+            if (orientation(md, construct_vector(tr.bisector)) != orientation(md, d)) {
+                d = opposite_vector(d);
+            }
+            auto bisector = construct_parametric_line(p, d);
+            m_i_traces.emplace_back(bisector, k0_next, k1_next, k1_prev, v_vd);
+        } else {
+            CGAL_assertion_msg(false, "Unbounded interval trace");
+        }
+    }
+
+    void trace_faces() {
+        for (auto hd : halfedges(m_voronoi->graph)) {
+            if (face(hd, m_voronoi->graph) != m_dummy_face) continue;
+            auto fd = add_face(m_voronoi->graph);
+            set_halfedge(fd, hd, m_voronoi->graph);
+            for (auto hd_inner : halfedges_around_face(hd, m_voronoi->graph)) {
+                set_face(hd_inner, fd, m_voronoi->graph);
+            }
+        }
+        remove_face(m_dummy_face, m_voronoi->graph);
     }
 };
 #pragma endregion
