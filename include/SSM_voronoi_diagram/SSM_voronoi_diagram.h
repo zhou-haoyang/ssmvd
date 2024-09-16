@@ -980,8 +980,8 @@ class SSM_voronoi_diagram {
         Line_2 l0 = construct_line(*(k0.edge())), l1 = construct_line(*(k1.edge()));
         Vector_2 nd0 = orthogonal_vector(l0) / abs(cc(l0)), nd1 = orthogonal_vector(l1) / abs(cc(l1));
         Vector_2 AB = nd0 - nd1;
-        FT C = scalar_product(nd1, construct_vector(ORIGIN, k0.site()->point())) -
-               scalar_product(nd0, construct_vector(ORIGIN, k1.site()->point()));
+        FT C = scalar_product(nd1, construct_vector(ORIGIN, k1.site()->point())) -
+               scalar_product(nd0, construct_vector(ORIGIN, k0.site()->point()));
         return construct_line(cx(AB), cy(AB), C);
     }
 
