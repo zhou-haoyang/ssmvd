@@ -47,6 +47,8 @@ class SSM_voronoi_diagram {
     using Line_2 = typename Traits::Line_2;
     using Polygon_2 = typename Traits::Polygon_2;
     using Parametric_line_2 = typename Traits::Parametric_line_2;
+    using Parameter_pair = typename Traits::Parameter_pair;
+    using Colinear = typename Traits::Colinear;
 
     using Metric = typename Traits::Metric;
     using Metric_traits = typename Traits::Metric_traits;
@@ -561,6 +563,10 @@ class SSM_voronoi_diagram {
 
         Cone_descriptor k_prev;
         for (;;) {
+            auto [_, interval] = *interval_it;
+            FT tmin_overlap = max(interval.tmin, tmin);
+            FT tmax_overlap = min(*interval.tmax, tmax);
+
             // Find the nearest two site bisector
             FT dist_min, tb_min;
             Line_2 bi_line_min;
@@ -569,9 +575,6 @@ class SSM_voronoi_diagram {
             for (auto site_it = m_sites.begin(); site_it != m_sites.end(); ++site_it) {
                 if (site_it == k0.site()) continue;
 
-                auto interval = *interval_it;
-                FT tmin_overlap = max(interval.tmin, tmin);
-                FT tmax_overlap = min(interval.tmax, tmax);
                 intervals_map[site_index(site_it)].clip(tmin_overlap, tmax_overlap, m_intervals_cache);
                 auto& intervals_overlap = m_intervals_cache;
 
@@ -777,13 +780,6 @@ class SSM_voronoi_diagram {
 
     TRAIT_FUNC(bool, is_degenerate, is_degenerate_2_object)
 
-    struct Colinear {
-        // operator =
-        bool operator==(const Colinear&) const { return true; }
-    };  // namespace CGAL::SSM_voronoi_diagram
-
-    using Parametric_line_intersection = std::variant<std::pair<FT, FT>, Colinear>;
-
     std::size_t site_index(Site_const_iterator site) const { return std::distance(m_sites.cbegin(), site); }
 
     Cone_index cone_index(Cone_descriptor k) const {
@@ -797,8 +793,8 @@ class SSM_voronoi_diagram {
      * @param d
      * @return std::optional<FT>
      */
-    std::optional<Parametric_line_intersection> intersect_ray(const Vector_2& lp, const Vector_2& ld,
-                                                              const Vector_2& d) {
+    std::optional<std::variant<Parameter_pair, Colinear>> intersect_ray(const Vector_2& lp, const Vector_2& ld,
+                                                                        const Vector_2& d) {
         FT det = determinant(ld, d);
         if (is_zero(det)) {
             if (is_zero(determinant(lp, d))) {
@@ -815,8 +811,9 @@ class SSM_voronoi_diagram {
         return std::make_pair(ts, tr);
     }
 
-    std::optional<Parametric_line_intersection> intersect_ray(const Vector_2& lp, const Vector_2& ld, const Vector_2& d,
-                                                              FT tmin, std::optional<FT> tmax) {
+    std::optional<std::variant<Parameter_pair, Colinear>> intersect_ray(const Vector_2& lp, const Vector_2& ld,
+                                                                        const Vector_2& d, FT tmin,
+                                                                        std::optional<FT> tmax) {
         auto isect = intersect_ray(lp, ld, d);
         if (!isect || std::holds_alternative<Colinear>(*isect)) return isect;
 
@@ -891,7 +888,7 @@ class SSM_voronoi_diagram {
 
         // Find next cone of ed0
         Point_2 p0 = construct_source(*ed0);
-        auto isect0 = intersect(p, d, construct_vector(ORIGIN, p0), tmin, tmax);
+        auto isect0 = intersect_ray(p, d, construct_vector(ORIGIN, p0), tmin, tmax);
         int next_cone_idx = -1;
         if (isect0) {
             if (std::holds_alternative<Colinear>(*isect0)) {
@@ -920,7 +917,7 @@ class SSM_voronoi_diagram {
             }
         } else {
             Point_2 p1 = construct_target(*ed0);
-            auto isect1 = intersect(p, d, construct_vector(ORIGIN, p1), tmin, tmax);
+            auto isect1 = intersect_ray(p, d, construct_vector(ORIGIN, p1), tmin, tmax);
             if (!isect1) {
                 // Segment is in one cone
                 res.add_intersection(tmin);
@@ -956,7 +953,7 @@ class SSM_voronoi_diagram {
 
         while (true) {
             Point_2 p_next = next_cone_idx == 0 ? construct_source(*ed0) : construct_target(*ed0);
-            auto isect_next = intersect(p, d, construct_vector(ORIGIN, p_next), tmin, tmax);
+            auto isect_next = intersect_ray(p, d, construct_vector(ORIGIN, p_next), tmin, tmax);
             if (!isect_next) break;
             auto [ts, tr] = std::get<std::pair<FT, FT>>(*isect_next);
             CGAL_assertion(ts > tmin && tr > 0);

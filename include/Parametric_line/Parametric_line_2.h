@@ -2,10 +2,12 @@
 #define PARAMETRIC_LINE_PARAMETRIC_LINE_2_H
 
 #include <CGAL/Origin.h>
+#include <CGAL/determinant.h>
 
 #include <algorithm>
 #include <utility>
 #include <optional>
+#include <variant>
 
 namespace CGAL {
 template <class R_>
@@ -51,6 +53,12 @@ class Parametric_line_traits_2 {
     using Self = Parametric_line_traits_2<K>;
     using Parametric_line_2 = Parametric_line_2<Self>;
 
+    struct Colinear {
+        bool operator==(const Colinear &) const { return true; }
+    };
+
+    using Parameter_pair = std::pair<FT, FT>;
+
     struct Construct_parametric_line_2 {
         Parametric_line_2 operator()(const Point_2 &p, const Vector_2 &d) const { return Parametric_line_2(p, d); }
 
@@ -83,9 +91,40 @@ class Parametric_line_traits_2 {
     };
 
     struct Intersect_2 : public K::Intersect_2 {
-        std::optional<std::pair<FT, FT>> operator()(const Parametric_line_2 &l0, const Parametric_line_2 &l1) {}
+        std::optional<std::variant<Parameter_pair, Colinear>> operator()(const Parametric_line_2 &l0,
+                                                                         const Parametric_line_2 &l1) {
+            Point_2 p0 = l0.p(), p1 = l1.p();
+            Vector_2 d0 = l0.d(), d1 = l1.d();
+            Vector_2 dp = p1 - p0;
 
-        std::optional<FT> operator()(const Parametric_line_2 &l0, const Line_2 &l1) {}
+            FT det = determinant(d0, d1);
+            if (is_zero(det)) {
+                if (is_zero(determinant(dp, d0))) return Colinear();
+                return std::nullopt;  // parallel
+            }
+
+            FT denorm = 1.0 / det;
+            FT t0 = denorm * determinant(d0, dp);
+            FT t1 = denorm * determinant(d1, dp);
+
+            return std::make_pair(t0, t1);
+        }
+
+        std::optional<std::variant<FT, Colinear>> operator()(const Parametric_line_2 &l0, const Line_2 &l1) {
+            Point_2 p = l0.p();
+            Vector_2 d = l0.d();
+            Vector_2 n(l1.a(), l1.b());
+            FT c = l1.c();
+
+            FT nd = scalar_product(n, d);
+            FT num = scalar_product(n, p - ORIGIN) + c;
+            if (is_zero(nd)) {
+                if (is_zero(num)) return Colinear();
+                return std::nullopt;  // parallel
+            }
+
+            return -num / nd;
+        }
     };
 
     auto construct_parametric_line_2_object() const { return Construct_parametric_line_2(); }
