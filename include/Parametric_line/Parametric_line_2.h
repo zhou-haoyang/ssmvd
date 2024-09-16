@@ -46,6 +46,8 @@ class Parametric_line_traits_2 {
     using FT = typename K::FT;
     using Point_2 = typename K::Point_2;
     using Vector_2 = typename K::Vector_2;
+    using Line_2 = typename K::Line_2;
+    using Segment_2 = typename K::Segment_2;
     using Self = Parametric_line_traits_2<K>;
     using Parametric_line_2 = Parametric_line_2<Self>;
 
@@ -54,6 +56,10 @@ class Parametric_line_traits_2 {
 
         Parametric_line_2 operator()(const Point_2 &p0, const Point_2 &p1) const {
             return Parametric_line_2(p0, p1 - p0);
+        }
+
+        Parametric_line_2 operator()(const Segment_2 &s) const {
+            return Parametric_line_2(s.source(), s.target() - s.source());
         }
     };
 
@@ -78,6 +84,8 @@ class Parametric_line_traits_2 {
 
     struct Intersect_2 : public K::Intersect_2 {
         std::optional<std::pair<FT, FT>> operator()(const Parametric_line_2 &l0, const Parametric_line_2 &l1) {}
+
+        std::optional<FT> operator()(const Parametric_line_2 &l0, const Line_2 &l1) {}
     };
 
     auto construct_parametric_line_2_object() const { return Construct_parametric_line_2(); }

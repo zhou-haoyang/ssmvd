@@ -6,6 +6,7 @@
 #include <CGAL/Origin.h>
 #include <CGAL/Polygon_2.h>
 #include <CGAL/enum.h>
+#include <CGAL/number_utils.h>
 #include <CGAL/property_map.h>
 
 #include <boost/container_hash/hash.hpp>
@@ -18,7 +19,7 @@
 
 #define TRAIT_FUNC(ret_type, name, functor)                  \
     template <class... T>                                    \
-    ret_type name(T&&... args) {                             \
+    ret_type name(T&&... args) const {                       \
         return m_traits.functor()(std::forward<T>(args)...); \
     }
 
@@ -96,17 +97,20 @@ class SSM_voronoi_diagram {
     };
 
     using Site_list = std::list<Site>;
-    using Site_iterator = typename Site_list::iterator;
+    using Site_const_iterator = typename Site_list::const_iterator;
 
     class Cone_descriptor {
        public:
-        Cone_descriptor(Site_iterator s, Metric_edge_iterator e) : m_site(std::move(s)), m_edge(std::move(e)) {}
+        Cone_descriptor(Site_const_iterator s = {}, Metric_edge_iterator e = {})
+            : m_site(std::move(s)), m_edge(std::move(e)) {}
 
-        PROPERTY(Site_iterator, site)
+        PROPERTY(Site_const_iterator, site)
         PROPERTY(Metric_edge_iterator, edge)
 
+        bool operator==(const Cone_descriptor& other) const { return m_site == other.m_site && m_edge == other.m_edge; }
+
        private:
-        Site_iterator m_site;
+        Site_const_iterator m_site;
         Metric_edge_iterator m_edge;
     };
 
@@ -145,7 +149,7 @@ class SSM_voronoi_diagram {
 
     struct Two_site_bisector_info {
         Cone_descriptor k0;
-        Site_iterator c1;
+        Site_const_iterator c1;
         Metric_edge_iterator e1;
     };
 
@@ -175,7 +179,8 @@ class SSM_voronoi_diagram {
         Voronoi_diagram(const Traits& traits)
             : vpm(get(vertex_point, graph)),
               vertex_index_map(get(vertex_index, graph)),
-              vertex_info_map(get(Vertex_info_property{}, graph)) {}
+              vertex_info_map(get(Vertex_info_property{}, graph)),
+              m_traits(traits) {}
 
         /**
          * @brief The copy constructor is deleted to avoid the property map ownership issue.
@@ -189,6 +194,8 @@ class SSM_voronoi_diagram {
             put(vertex_info_map, vd, info);
             return vd;
         }
+
+        Vector_2 normalized(const Vector_2& v) const { return v / approximate_sqrt(v.squared_length()); }
 
         void insert_halfedge_loop(vd_halfedge_descriptor hd) {
             auto vt = target(hd, graph), vs = source(hd, graph);
@@ -466,7 +473,7 @@ class SSM_voronoi_diagram {
 
             for (auto it = it0; it != it1; ++it) {
                 auto i = std::distance(ts.begin(), it);
-                res.add_intersection(*it, eds[i]);
+                res.add_intersection(*it);
                 if (*it < tmax) res.add_edge(eds[i]);
             }
 
@@ -513,7 +520,9 @@ class SSM_voronoi_diagram {
 
     Metric_iterator add_metric(Metric m) { return m_metrics.emplace(m_metrics.end(), std::move(m), m_traits); }
 
-    Site_iterator add_site(Point_2 p, Metric_iterator m) { return m_sites.emplace(m_sites.end(), std::move(p), m); }
+    Site_const_iterator add_site(Point_2 p, Metric_iterator m) {
+        return m_sites.emplace(m_sites.end(), std::move(p), m);
+    }
 
     FT find_nearest_site(const Point_2& p, Cone_descriptor& cone) const {
         FT d_min;
@@ -523,7 +532,7 @@ class SSM_voronoi_diagram {
             auto res = site_it->metric()->any_intersection(construct_vector(site_it->point(), p));
             if (!res) continue;
             auto [pm, ed] = *res;
-            FT weight = 1.0 / squared_distance(ORIGIN, pm);
+            FT weight = 1.0 / squared_distance(Point_2(ORIGIN), pm);
 
             auto d = approximate_sqrt(squared_distance(p, site_it->point()) * weight);
             if (d < d_min || init) {
@@ -561,12 +570,12 @@ class SSM_voronoi_diagram {
                 if (site_it == k0.site()) continue;
 
                 auto interval = *interval_it;
-                FT tmin_overlap = max(interval.t_min(), tmin);
-                FT tmax_overlap = min(interval.t_max(), tmax);
+                FT tmin_overlap = max(interval.tmin, tmin);
+                FT tmax_overlap = min(interval.tmax, tmax);
                 intervals_map[site_index(site_it)].clip(tmin_overlap, tmax_overlap, m_intervals_cache);
                 auto& intervals_overlap = m_intervals_cache;
 
-                for (auto& [ed, interval_overlap] : intervals_overlap) {
+                for (auto [ed, interval_overlap] : intervals_overlap) {
                     Cone_descriptor k1(site_it, ed);
                     if (k1 == k_prev) continue;
 
@@ -578,7 +587,7 @@ class SSM_voronoi_diagram {
 
                     FT tb = std::get<FT>(*isect);
                     // TODO: marginal case: tb is on the terminal points
-                    if (tb <= interval_overlap.tmin() || tb > interval_overlap.tmax()) continue;
+                    if (tb <= interval_overlap.tmin || tb > interval_overlap.tmax) continue;
 
                     FT dist = tb - tmin;
                     CGAL_assertion_msg(dist >= 0, "Intersection must be on the segment");
@@ -619,13 +628,13 @@ class SSM_voronoi_diagram {
                 k0 = k1;
                 tmin = tb_min;
 
-                auto& intervals = intervals_map[k0.site()];
+                auto& intervals = intervals_map[site_index(k0.site())];
                 interval_it = intervals.find_cone(k0.edge());
                 CGAL_assertion(interval_it != intervals.end());
             } else {
                 // No bisector found, terminate if this is the last interval
                 interval_it++;
-                auto& intervals = intervals_map[k0.site()];
+                auto& intervals = intervals_map[site_index(k0.site())];
                 if (interval_it == intervals.end()) {
                     break;
                 }
@@ -634,7 +643,7 @@ class SSM_voronoi_diagram {
                 // Otherwise switch to the next cone
                 auto [m_ed, isect] = *interval_it;
                 if (add_cone_vertices) {
-                    Point_2 p = construct_point_on(b_line, isect.t_min);
+                    Point_2 p = construct_point_on(b_line, isect.tmin);
                     auto v_vd = m_voronoi->add_vertex(p, Boundary_cone_info{b_ed, k0});
                     if (add_border_edges && prev_vd != vd_graph_traits::null_vertex()) {
                         m_voronoi->connect(prev_vd, v_vd, fd0, fd1);
@@ -651,7 +660,7 @@ class SSM_voronoi_diagram {
         return std::make_pair(k0, prev_vd);
     }
 
-    void trace_all_boundaries(Boundary_edge_iterator b_ed0, Boundary_vertex_info b_ed1, bool add_border_edges = true,
+    void trace_all_boundaries(Boundary_edge_iterator b_ed0, Boundary_edge_iterator b_ed1, bool add_border_edges = true,
                               bool add_cone_vertices = false) {
         auto b_ed = b_ed0;
         Cone_descriptor k0;
@@ -755,6 +764,7 @@ class SSM_voronoi_diagram {
     TRAIT_FUNC(Parametric_line_2, construct_parametric_line, construct_parametric_line_2_object)
     TRAIT_FUNC(Line_2, construct_line, construct_line_2_object)
     TRAIT_FUNC(Vector_2, opposite_vector, construct_opposite_vector_2_object)
+    TRAIT_FUNC(auto, intersect, intersect_2_object)
 
     TRAIT_FUNC(FT, squared_distance, compute_squared_distance_2_object)
     TRAIT_FUNC(FT, determinant, compute_determinant_2_object)
@@ -774,7 +784,7 @@ class SSM_voronoi_diagram {
 
     using Parametric_line_intersection = std::variant<std::pair<FT, FT>, Colinear>;
 
-    std::size_t site_index(Site_iterator site) const { return std::distance(m_sites.begin(), site); }
+    std::size_t site_index(Site_const_iterator site) const { return std::distance(m_sites.cbegin(), site); }
 
     Cone_index cone_index(Cone_descriptor k) const {
         return Cone_index(site_index(k.site()), k.site()->metric()->index(k.edge()));
@@ -787,7 +797,8 @@ class SSM_voronoi_diagram {
      * @param d
      * @return std::optional<FT>
      */
-    std::optional<Parametric_line_intersection> intersect(const Vector_2& lp, const Vector_2& ld, const Vector_2& d) {
+    std::optional<Parametric_line_intersection> intersect_ray(const Vector_2& lp, const Vector_2& ld,
+                                                              const Vector_2& d) {
         FT det = determinant(ld, d);
         if (is_zero(det)) {
             if (is_zero(determinant(lp, d))) {
@@ -804,9 +815,9 @@ class SSM_voronoi_diagram {
         return std::make_pair(ts, tr);
     }
 
-    std::optional<Parametric_line_intersection> intersect(const Vector_2& lp, const Vector_2& ld, const Vector_2& d,
-                                                          FT tmin, std::optional<FT> tmax) {
-        auto isect = intersect(lp, ld, d);
+    std::optional<Parametric_line_intersection> intersect_ray(const Vector_2& lp, const Vector_2& ld, const Vector_2& d,
+                                                              FT tmin, std::optional<FT> tmax) {
+        auto isect = intersect_ray(lp, ld, d);
         if (!isect || std::holds_alternative<Colinear>(*isect)) return isect;
 
         auto [ts, tr] = std::get<std::pair<FT, FT>>(*isect);
@@ -820,8 +831,9 @@ class SSM_voronoi_diagram {
         Endpoint_type type;
     };
 
-    auto find_next_interval(Cone_descriptor k_cur, const Parametric_line_2& segment, Endpoint_type prev_type, FT tmin,
-                            std::optional<FT> tmax = std::nullopt) {
+    std::optional<Next_interval_info> find_next_interval(Cone_descriptor k_cur, const Parametric_line_2& segment,
+                                                         Endpoint_type prev_type, FT tmin,
+                                                         std::optional<FT> tmax = std::nullopt) {
         if (prev_type == SITE) {
             return std::nullopt;
         }
@@ -847,7 +859,8 @@ class SSM_voronoi_diagram {
         };
 
         if (prev_type == CW || prev_type == UNKNOWN) {
-            auto isect_next = intersect(p, d, construct_vector(ORIGIN, construct_source(*k_cur.edge())), tmin, tmax);
+            auto isect_next =
+                intersect_ray(p, d, construct_vector(ORIGIN, construct_source(*k_cur.edge())), tmin, tmax);
             auto res = process_isect(isect_next, CW);
             if (res)
                 return res;
@@ -855,10 +868,10 @@ class SSM_voronoi_diagram {
                 return std::nullopt;
         }
 
-        auto isect_next = intersect(p, d, construct_vector(ORIGIN, construct_target(*k_cur.edge())), tmin, tmax);
+        auto isect_next = intersect_ray(p, d, construct_vector(ORIGIN, construct_target(*k_cur.edge())), tmin, tmax);
         return process_isect(isect_next, CCW);
     }
-    auto find_intervals(Site_iterator site, const Parametric_line_2& segment, Intervals& res, FT tmin,
+    auto find_intervals(Site_const_iterator site, const Parametric_line_2& segment, Intervals& res, FT tmin,
                         std::optional<FT> tmax = std::nullopt) {
         res.clear();
 
@@ -964,11 +977,11 @@ class SSM_voronoi_diagram {
         }
     }
 
-    Vector_2 orthogonal_vertor(const Line_2& l) { return construct_vector(ca(l), cb(l)); }
+    Vector_2 orthogonal_vector(const Line_2& l) const { return construct_vector(ca(l), cb(l)); }
 
     Line_2 get_bisector(const Cone_descriptor& k0, const Cone_descriptor& k1) {
         Line_2 l0 = construct_line(*(k0.edge())), l1 = construct_line(*(k1.edge()));
-        Vector_2 nd0 = orthogonal_vertor(l0) / abs(cc(l0)), nd1 = orthogonal_vertor(l1) / abs(cc(l1));
+        Vector_2 nd0 = orthogonal_vector(l0) / abs(cc(l0)), nd1 = orthogonal_vector(l1) / abs(cc(l1));
         Vector_2 AB = nd0 - nd1;
         FT C = scalar_product(nd1, construct_vector(ORIGIN, k0.site()->point())) -
                scalar_product(nd0, construct_vector(ORIGIN, k1.site()->point()));
@@ -981,13 +994,15 @@ class SSM_voronoi_diagram {
         // Clip the bisector with the cone k0 and k1
         int next_cone_idx = -1;
         std::optional<Next_interval_info> k_next_info;
-        auto info0 = find_next_interval(tr.k0, tr.bisector, tr.k_prev == tr.k0 ? tr.prev_type : UNKNOWN, tmin);
-        auto info1 = find_next_interval(tr.k1, tr.bisector, tr.k_prev == tr.k1 ? tr.prev_type : UNKNOWN, tmin);
+        auto info0 = find_next_interval(tr.k0, tr.bisector,
+                                        tr.k_prev == std::make_optional(tr.k0) ? tr.prev_type : UNKNOWN, tmin);
+        auto info1 = find_next_interval(tr.k1, tr.bisector,
+                                        tr.k_prev == std::make_optional(tr.k1) ? tr.prev_type : UNKNOWN, tmin);
         if (info0) {
             k_next_info = info0;
             next_cone_idx = 0;
         }
-        if (info1 && (!k_next_info || info1->t < k_next_info->ts)) {
+        if (info1 && (!k_next_info || info1->ts < k_next_info->ts)) {
             k_next_info = info1;
             next_cone_idx = 1;
         }
@@ -1038,7 +1053,7 @@ class SSM_voronoi_diagram {
                 if (!isect || std::holds_alternative<Colinear>(*isect)) continue;
 
                 FT tb = std::get<FT>(*isect);
-                if (tb <= interval_overlap.tmin() || tb > interval_overlap.tmax()) continue;
+                if (tb <= interval_overlap.tmin || tb > interval_overlap.tmax) continue;
 
                 FT dist = tb - tmin;
                 CGAL_assertion_msg(dist >= 0, "Intersection must be on the segment");
@@ -1071,7 +1086,7 @@ class SSM_voronoi_diagram {
             auto d_02 = construct_vector(bi_line_min);
             Line_2 l0 = construct_line(*(tr.k0.edge())), l1 = construct_line(*(tr.k1.edge()));
             if (is_negative(
-                    scalar_product(d_02, orthogonal_vertor(l1) / abs(cc(l1)) - orthogonal_vector(l0) / abs(cc(l0))))) {
+                    scalar_product(d_02, orthogonal_vector(l1) / abs(cc(l1)) - orthogonal_vector(l0) / abs(cc(l0))))) {
                 d_02 = opposite_vector(d_02);
             }
             auto bisector_02 = construct_parametric_line(p, d_02);
@@ -1080,7 +1095,7 @@ class SSM_voronoi_diagram {
             auto bisector_line_12 = get_bisector(tr.k1, k2_min);
             auto d_12 = construct_vector(bisector_line_12);
             if (is_negative(
-                    scalar_product(d_12, orthogonal_vertor(l0) / abs(cc(l0)) - orthogonal_vector(l1) / abs(cc(l1))))) {
+                    scalar_product(d_12, orthogonal_vector(l0) / abs(cc(l0)) - orthogonal_vector(l1) / abs(cc(l1))))) {
                 d_12 = opposite_vector(d_12);
             }
             auto bisector_12 = construct_parametric_line(p, d_12);
@@ -1100,12 +1115,12 @@ class SSM_voronoi_diagram {
             }
 
             Point_2 p = construct_point_on(tr.bisector, k_next_info->ts);
-            auto v_vd = m_voronoi->add_vertex(p, Two_site_bisector_info{k0_next, k1_prev, k1_next});
+            auto v_vd = m_voronoi->add_vertex(p, Two_site_bisector_info{k0_next, k1_next.site(), k1_next.edge()});
             m_voronoi->connect(tr.v_vd, v_vd, m_dummy_face, m_dummy_face);
             m_i_vertices.emplace(v_id, v_vd);
 
             auto d = construct_vector(get_bisector(k0_next, k1_next));
-            auto m = k_next_info->type == CCW ? construct_target(k1_prev.edge()) : construct_source(k1_prev.edge());
+            auto m = k_next_info->type == CCW ? construct_target(*k1_prev.edge()) : construct_source(*k1_prev.edge());
             auto md = construct_vector(ORIGIN, m);
             if (orientation(md, construct_vector(tr.bisector)) != orientation(md, d)) {
                 d = opposite_vector(d);
