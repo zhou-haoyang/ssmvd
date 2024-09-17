@@ -141,7 +141,7 @@ class SSM_voronoi_diagram {
 
     struct Boundary_cone_info {
         Boundary_edge_iterator ed;
-        Cone_descriptor k;
+        Cone_descriptor k0, k1;
     };
 
     struct Boundary_bisector_info {
@@ -291,6 +291,11 @@ class SSM_voronoi_diagram {
 
         bool operator>(const Cone_index& other) const {
             return site_idx > other.site_idx || (site_idx == other.site_idx && edge_idx > other.edge_idx);
+        }
+
+        friend std::ostream& operator<<(std::ostream& os, const Cone_index& k) {
+            os << "(c" << k.site_idx << ", e" << k.edge_idx << ")";
+            return os;
         }
     };
 
@@ -551,14 +556,15 @@ class SSM_voronoi_diagram {
                 d_min = d;
                 cone.set_site(site_it);
                 cone.set_edge(ed);
+                init = false;
             }
         }
 
         return d_min;
     }
 
-    auto trace_boundary(Boundary_edge_iterator b_ed, Cone_descriptor k0, vd_vertex_descriptor prev_vd,
-                        bool add_border_edges = false, bool add_cone_vertices = false,
+    auto trace_boundary(Boundary_edge_iterator b_ed, Cone_descriptor k0, Cone_descriptor k_prev,
+                        vd_vertex_descriptor prev_vd, bool add_border_edges = false, bool add_cone_vertices = false,
                         vd_face_descriptor fd0 = vd_graph_traits::null_face(),
                         vd_face_descriptor fd1 = vd_graph_traits::null_face()) {
         auto b_line = construct_parametric_line(*b_ed);
@@ -571,7 +577,6 @@ class SSM_voronoi_diagram {
         auto interval_it = intervals.find_cone(k0.edge());
         CGAL_assertion_msg(interval_it != intervals.end(), "Initial cone k0 not found in intervals");
 
-        Cone_descriptor k_prev;
         for (;;) {
             auto [_, interval] = *interval_it;
             FT tmin_overlap = max(interval.tmin, tmin);
@@ -580,7 +585,7 @@ class SSM_voronoi_diagram {
             // Find the nearest two site bisector
             FT dist_min, tb_min;
             Line_2 bi_line_min;
-            Cone_descriptor k1_min;
+            Cone_descriptor k1_min = null_cone();
             bool found = false;
             for (auto site_it = m_sites.begin(); site_it != m_sites.end(); ++site_it) {
                 if (site_it == k0.site()) continue;
@@ -603,6 +608,7 @@ class SSM_voronoi_diagram {
                     if (tb <= interval_overlap.tmin || tb > interval_overlap.tmax) continue;
 
                     FT dist = tb - tmin;
+                    // std::clog << cone_index(k1) << ": " << dist << std::endl;
                     CGAL_assertion_msg(dist >= 0, "Intersection must be on the segment");
                     if (dist < dist_min || !found) {
                         dist_min = dist;
@@ -610,7 +616,7 @@ class SSM_voronoi_diagram {
                         bi_line_min = bi_line;
                         k1_min = k1;
                         found = true;
-                        break;  // goto next site
+                        // break;  // goto next site
                     } else if (dist == dist_min) {
                         CGAL_assertion_msg(false, "TODO: handle multiple bisectors");
                     }
@@ -637,6 +643,7 @@ class SSM_voronoi_diagram {
                 m_i_traces.emplace_back(bisector, k0, k1, std::nullopt, v_vd);
 
                 // Switch current cone to k1
+                std::cout << "found bisector: " << cone_index(k0) << " -> " << cone_index(k1) << std::endl;
                 k_prev = k0;
                 k0 = k1;
                 tmin = tb_min;
@@ -657,30 +664,32 @@ class SSM_voronoi_diagram {
                 auto [m_ed, isect] = *interval_it;
                 if (add_cone_vertices) {
                     Point_2 p = construct_point_on(b_line, isect.tmin);
-                    auto v_vd = m_voronoi->add_vertex(p, Boundary_cone_info{b_ed, k0});
+                    auto v_vd = m_voronoi->add_vertex(p, Boundary_cone_info{b_ed, k0, {k0.site(), m_ed}});
                     if (add_border_edges && prev_vd != vd_graph_traits::null_vertex()) {
                         m_voronoi->connect(prev_vd, v_vd, fd0, fd1);
                     }
                     prev_vd = v_vd;
                 }
 
+                std::cout << "found boundary-cone: " << cone_index(k0) << " -> " << cone_index({k0.site(), m_ed})
+                          << std::endl;
                 k_prev = k0;
                 k0.set_edge(m_ed);
                 tmin = isect.tmin;
             }
         }
 
-        return std::make_pair(k0, prev_vd);
+        return std::make_tuple(k0, k_prev, prev_vd);
     }
 
     void trace_all_boundaries(Boundary_edge_iterator b_ed0, Boundary_edge_iterator b_ed1, bool add_border_edges = true,
                               bool add_cone_vertices = false) {
         auto b_ed = b_ed0;
-        Cone_descriptor k0;
+        Cone_descriptor k0 = null_cone();
         find_nearest_site(construct_source(*b_ed), k0);
 
         vd_vertex_descriptor prev_vd = vd_graph_traits::null_vertex(), vd0;
-
+        Cone_descriptor k_prev = null_cone();
         for (; b_ed != b_ed1; ++b_ed) {
             if (add_border_edges) {
                 auto v_vd = m_voronoi->add_vertex(construct_source(*b_ed), Boundary_vertex_info{b_ed, k0});
@@ -691,8 +700,9 @@ class SSM_voronoi_diagram {
                 }
                 prev_vd = v_vd;
             }
-            std::tie(k0, prev_vd) = trace_boundary(b_ed, k0, prev_vd, add_border_edges, add_cone_vertices, m_dummy_face,
-                                                   vd_graph_traits::null_face());
+            std::tie(k0, k_prev, prev_vd) =
+                trace_boundary(b_ed, k0, k_prev, prev_vd, add_border_edges, add_cone_vertices, m_dummy_face,
+                               vd_graph_traits::null_face());
         }
         if (add_border_edges) {
             m_voronoi->connect(prev_vd, vd0, m_dummy_face, vd_graph_traits::null_face());
@@ -763,15 +773,26 @@ class SSM_voronoi_diagram {
         for (auto vd : vertices(m_voronoi->graph)) {
             std::visit(overloaded{
                            [&, this](const Boundary_vertex_info& info) {
+                               std::clog << "type: boundary vertex" << std::endl;
                                Point_2 p = get(m_voronoi->vpm, vd);
 
-                               Cone_descriptor k_nearest;
+                               Cone_descriptor k_nearest = null_cone();
                                find_nearest_site(p, k_nearest);
-                               CGAL_assertion(k_nearest == info.k);
+                               //    CGAL_assertion(k_nearest == info.k);
                            },
-                           [](const Boundary_cone_info& info) {},
-                           [&, this](const Boundary_bisector_info& info) {
+                           [&, this](const Boundary_cone_info& info) {
+                               std::clog << "type: boundary cone" << std::endl;
                                Point_2 p = get(m_voronoi->vpm, vd);
+                               auto [ed, k0, k1] = info;
+
+                               Cone_descriptor k_nearest = null_cone();
+                               FT d_min = find_nearest_site(p, k_nearest);
+                               //    CGAL_assertion(abs(d_min) < eps);
+                               CGAL_assertion(k_nearest == k0 || k_nearest == k1);
+                           },
+                           [=, this](const Boundary_bisector_info& info) {
+                               Point_2 p = get(m_voronoi->vpm, vd);
+                               std::clog << "type: boundary bisector: " << p << std::endl;
                                auto [ed, k0, k1] = info;
                                Metric_edge_iterator ed0, ed1;
                                auto d0 = distance(k0.site(), p, ed0);
@@ -780,14 +801,19 @@ class SSM_voronoi_diagram {
                                CGAL_assertion(ed0 == k0.edge() || ed1 == k1.edge());
                                CGAL_assertion(d0 && d1 && abs(*d0 - *d1) < eps);
 
-                               Cone_descriptor k_nearest;
-                               find_nearest_site(p, k_nearest);
+                               Cone_descriptor k_nearest = null_cone();
+                               FT d_min = find_nearest_site(p, k_nearest);
+                               std::cout << "k0" << cone_index(k0) << ", k1" << cone_index(k1) << ", k_nearest"
+                                         << cone_index(k_nearest) << std::endl;
+                               CGAL_assertion(abs(*d0 - d_min) < eps);
                                CGAL_assertion(k_nearest == k0 || k_nearest == k1);
                            },
                            [](const Two_site_bisector_info& info) {},
                            [](const Three_site_bisector_info& info) {},
                        },
                        get(m_voronoi->vertex_info_map, vd));
+            std::clog << "check_voronoi_diagram: vertex " << get(m_voronoi->vertex_index_map, vd) << " passed"
+                      << std::endl;
         }
         return true;
     }
@@ -836,6 +862,8 @@ class SSM_voronoi_diagram {
     Cone_index cone_index(Cone_descriptor k) const {
         return Cone_index(site_index(k.site()), k.site()->metric()->index(k.edge()));
     }
+
+    Cone_descriptor null_cone() const { return Cone_descriptor(m_sites.end(), {}); }
 
     /**
      * @brief Find the intersection of a parametric line with a ray with direction d and starting at the origin.
@@ -919,6 +947,7 @@ class SSM_voronoi_diagram {
         auto isect_next = intersect_ray(p, d, construct_vector(ORIGIN, construct_target(*k_cur.edge())), tmin, tmax);
         return process_isect(isect_next, CCW);
     }
+
     auto find_intervals(Site_const_iterator site, const Parametric_line_2& segment, Intervals& res, FT tmin,
                         std::optional<FT> tmax = std::nullopt) {
         res.clear();
@@ -937,83 +966,101 @@ class SSM_voronoi_diagram {
         CGAL_assertion(!!isect);
         Metric_edge_iterator ed0 = *isect;
 
-        // Find next cone of ed0
-        Point_2 p0 = construct_source(*ed0);
-        auto isect0 = intersect_ray(p, d, construct_vector(ORIGIN, p0), tmin, tmax);
-        int next_cone_idx = -1;
-        if (isect0) {
-            if (std::holds_alternative<Colinear>(*isect0)) {
-                // TODO: case 2.b, 2.c
-                CGAL_assertion(false);
-            } else {
-                auto [ts, tr] = std::get<std::pair<FT, FT>>(*isect0);
-                if (is_zero(ts)) {
-                    // TODO: case 2.a
+        Cone_descriptor k0(site, ed0);
+        res.add_intersection(tmin);
+        res.add_edge(ed0);
 
-                    CGAL_assertion(false);
-                } else if (is_zero(tr)) {
-                    // TODO: case 1.b
-                    CGAL_assertion(false);
-                } else {
-                    // case 1.a
-                    res.add_intersection(tmin);
-                    res.add_edge(ed0);
-
-                    res.add_intersection(ts);
-
-                    next_cone_idx = 0;
-                    ed0 = site->metric()->prev_edge(ed0);
-                    res.add_edge(ed0);
-                }
-            }
-        } else {
-            Point_2 p1 = construct_target(*ed0);
-            auto isect1 = intersect_ray(p, d, construct_vector(ORIGIN, p1), tmin, tmax);
-            if (!isect1) {
-                // Segment is in one cone
-                res.add_intersection(tmin);
-                res.add_edge(ed0);
-                if (tmax) res.add_intersection(*tmax);
-                return;
-            }
-
-            if (std::holds_alternative<Colinear>(*isect1)) {
-                // TODO: case 2.b, 2.c
-                CGAL_assertion(false);
-            } else {
-                auto [ts, tr] = std::get<std::pair<FT, FT>>(*isect1);
-                if (is_zero(ts)) {
-                    // TODO: case 2.a
-                    CGAL_assertion(false);
-                } else if (is_zero(tr)) {
-                    // TODO: case 1.b
-                    CGAL_assertion(false);
-                } else {
-                    // case 1.a
-                    res.add_intersection(tmin);
-                    res.add_edge(ed0);
-
-                    res.add_intersection(ts);
-
-                    next_cone_idx = 1;
-                    ed0 = site->metric()->next_edge(ed0);
-                    res.add_edge(ed0);
-                }
-            }
-        }
-
+        Endpoint_type prev_type = UNKNOWN;
         while (true) {
-            Point_2 p_next = next_cone_idx == 0 ? construct_source(*ed0) : construct_target(*ed0);
-            auto isect_next = intersect_ray(p, d, construct_vector(ORIGIN, p_next), tmin, tmax);
-            if (!isect_next) break;
-            auto [ts, tr] = std::get<std::pair<FT, FT>>(*isect_next);
-            CGAL_assertion(ts > tmin && tr > 0);
-            res.add_intersection(ts);
+            auto next_info = find_next_interval(k0, segment, prev_type, tmin, tmax);
+            if (!next_info) break;
 
-            ed0 = next_cone_idx == 0 ? site->metric()->prev_edge(ed0) : site->metric()->next_edge(ed0);
-            res.add_edge(ed0);
+            auto [k_next, ts, type] = *next_info;
+            res.add_intersection(ts);
+            res.add_edge(k_next.edge());
+            k0 = k_next;
+            prev_type = type;
         }
+
         if (tmax) res.add_intersection(*tmax);
+
+        // // Find next cone of ed0
+        // Point_2 p0 = construct_source(*ed0);
+        // auto isect0 = intersect_ray(p, d, construct_vector(ORIGIN, p0), tmin, tmax);
+        // int next_cone_idx = -1;
+        // if (isect0) {
+        //     if (std::holds_alternative<Colinear>(*isect0)) {
+        //         // TODO: case 2.b, 2.c
+        //         CGAL_assertion(false);
+        //     } else {
+        //         auto [ts, tr] = std::get<std::pair<FT, FT>>(*isect0);
+        //         if (is_zero(ts)) {
+        //             // TODO: case 2.a
+
+        //             CGAL_assertion(false);
+        //         } else if (is_zero(tr)) {
+        //             // TODO: case 1.b
+        //             CGAL_assertion(false);
+        //         } else {
+        //             // case 1.a
+        //             res.add_intersection(tmin);
+        //             res.add_edge(ed0);
+
+        //             res.add_intersection(ts);
+
+        //             next_cone_idx = 0;
+        //             ed0 = site->metric()->prev_edge(ed0);
+        //             res.add_edge(ed0);
+        //         }
+        //     }
+        // } else {
+        //     Point_2 p1 = construct_target(*ed0);
+        //     auto isect1 = intersect_ray(p, d, construct_vector(ORIGIN, p1), tmin, tmax);
+        //     if (!isect1) {
+        //         // Segment is in one cone
+        //         res.add_intersection(tmin);
+        //         res.add_edge(ed0);
+        //         if (tmax) res.add_intersection(*tmax);
+        //         return;
+        //     }
+
+        //     if (std::holds_alternative<Colinear>(*isect1)) {
+        //         // TODO: case 2.b, 2.c
+        //         CGAL_assertion(false);
+        //     } else {
+        //         auto [ts, tr] = std::get<std::pair<FT, FT>>(*isect1);
+        //         if (is_zero(ts)) {
+        //             // TODO: case 2.a
+        //             CGAL_assertion(false);
+        //         } else if (is_zero(tr)) {
+        //             // TODO: case 1.b
+        //             CGAL_assertion(false);
+        //         } else {
+        //             // case 1.a
+        //             res.add_intersection(tmin);
+        //             res.add_edge(ed0);
+
+        //             res.add_intersection(ts);
+
+        //             next_cone_idx = 1;
+        //             ed0 = site->metric()->next_edge(ed0);
+        //             res.add_edge(ed0);
+        //         }
+        //     }
+        // }
+
+        // while (true) {
+        //     Point_2 p_next = next_cone_idx == 0 ? construct_source(*ed0) : construct_target(*ed0);
+        //     auto isect_next = intersect_ray(p, d, construct_vector(ORIGIN, p_next), tmin, tmax);
+        //     if (!isect_next) break;
+        //     auto [ts, tr] = std::get<std::pair<FT, FT>>(*isect_next);
+        //     CGAL_assertion(ts > tmin && tr > 0);
+        //     res.add_intersection(ts);
+
+        //     ed0 = next_cone_idx == 0 ? site->metric()->prev_edge(ed0) : site->metric()->next_edge(ed0);
+        //     res.add_edge(ed0);
+        // }
+        // if (tmax) res.add_intersection(*tmax);
     }
 
     void find_all_intervals(const Parametric_line_2& segment, std::vector<Intervals>& res, FT tmin,
@@ -1082,7 +1129,7 @@ class SSM_voronoi_diagram {
         // Find the nearest three site bisector
         FT dist_min, tb_min;
         Line_2 bi_line_min;
-        Cone_descriptor k2_min;
+        Cone_descriptor k2_min = null_cone();
         bool found = false;
         for (auto site_it = m_sites.begin(); site_it != m_sites.end(); ++site_it) {
             if (site_it == tr.k0.site() || site_it == tr.k1.site()) continue;
