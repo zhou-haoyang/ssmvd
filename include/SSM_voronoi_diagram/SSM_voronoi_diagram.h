@@ -643,7 +643,7 @@ class SSM_voronoi_diagram {
                 m_i_traces.emplace_back(bisector, k0, k1, std::nullopt, v_vd);
 
                 // Switch current cone to k1
-                std::cout << "found bisector: " << cone_index(k0) << " -> " << cone_index(k1) << std::endl;
+                // std::cout << "found bisector: " << cone_index(k0) << " -> " << cone_index(k1) << std::endl;
                 k_prev = k0;
                 k0 = k1;
                 tmin = tb_min;
@@ -671,8 +671,8 @@ class SSM_voronoi_diagram {
                     prev_vd = v_vd;
                 }
 
-                std::cout << "found boundary-cone: " << cone_index(k0) << " -> " << cone_index({k0.site(), m_ed})
-                          << std::endl;
+                // std::cout << "found boundary-cone: " << cone_index(k0) << " -> " << cone_index({k0.site(), m_ed})
+                //           << std::endl;
                 k_prev = k0;
                 k0.set_edge(m_ed);
                 tmin = isect.tmin;
@@ -787,6 +787,8 @@ class SSM_voronoi_diagram {
 
                                Cone_descriptor k_nearest = null_cone();
                                FT d_min = find_nearest_site(p, k_nearest);
+                               //    std::cout << "k0" << cone_index(k0) << ", k1" << cone_index(k1) << ", k_nearest"
+                               //              << cone_index(k_nearest) << std::endl;
                                //    CGAL_assertion(abs(d_min) < eps);
                                CGAL_assertion(k_nearest == k0 || k_nearest == k1);
                            },
@@ -803,8 +805,8 @@ class SSM_voronoi_diagram {
 
                                Cone_descriptor k_nearest = null_cone();
                                FT d_min = find_nearest_site(p, k_nearest);
-                               std::cout << "k0" << cone_index(k0) << ", k1" << cone_index(k1) << ", k_nearest"
-                                         << cone_index(k_nearest) << std::endl;
+                               //    std::cout << "k0" << cone_index(k0) << ", k1" << cone_index(k1) << ", k_nearest"
+                               //              << cone_index(k_nearest) << std::endl;
                                CGAL_assertion(abs(*d0 - d_min) < eps);
                                CGAL_assertion(k_nearest == k0 || k_nearest == k1);
                            },
@@ -873,10 +875,10 @@ class SSM_voronoi_diagram {
      * @return std::optional<FT>
      */
     std::optional<std::variant<Parameter_pair, Colinear>> intersect_ray(const Vector_2& lp, const Vector_2& ld,
-                                                                        const Vector_2& d) {
-        FT det = determinant(ld, d);
+                                                                        const Vector_2& rd) {
+        FT det = determinant(ld, rd);
         if (is_zero(det)) {
-            if (is_zero(determinant(lp, d))) {
+            if (is_zero(determinant(lp, rd))) {
                 return Colinear{};
             }
             return std::nullopt;  // Parallel
@@ -886,8 +888,8 @@ class SSM_voronoi_diagram {
         FT tr = denorm * determinant(ld, lp);
         if (tr < 0) return std::nullopt;
 
-        FT ts = denorm * determinant(d, lp);
-        return std::make_pair(ts, tr);
+        FT tl = denorm * determinant(rd, lp);
+        return std::make_pair(tl, tr);
     }
 
     std::optional<std::variant<Parameter_pair, Colinear>> intersect_ray(const Vector_2& lp, const Vector_2& ld,
@@ -955,8 +957,8 @@ class SSM_voronoi_diagram {
         if (tmax && tmin > *tmax) return;
 
         auto pmin = construct_point_on(segment, tmin);
-        auto p = construct_vector(site->point(), construct_point(segment));
-        auto d = construct_vector(segment);
+        // auto p = construct_vector(site->point(), construct_point(segment));
+        // auto d = construct_vector(segment);
 
         // TODO: check case 3
 
@@ -978,6 +980,7 @@ class SSM_voronoi_diagram {
             auto [k_next, ts, type] = *next_info;
             res.add_intersection(ts);
             res.add_edge(k_next.edge());
+            // tmin = ts;
             k0 = k_next;
             prev_type = type;
         }
