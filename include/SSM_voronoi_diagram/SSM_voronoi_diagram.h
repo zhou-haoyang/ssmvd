@@ -518,7 +518,9 @@ class SSM_voronoi_diagram {
 #pragma region public methods
    public:
     SSM_voronoi_diagram(const Polygon_2& boundary, Traits traits = {})
-        : m_boundary(boundary), m_traits(std::move(traits)) {}
+        : m_boundary(boundary), m_traits(std::move(traits)) {
+        reset();
+    }
 
     Metric_iterator add_metric(Metric m) { return m_metrics.emplace(m_metrics.end(), std::move(m), m_traits); }
 
@@ -526,17 +528,25 @@ class SSM_voronoi_diagram {
         return m_sites.emplace(m_sites.end(), std::move(p), m);
     }
 
+    std::optional<FT> distance(Site_const_iterator site_it, const Point_2& p, Metric_edge_iterator& ed_out) const {
+        auto res = site_it->metric()->any_intersection(construct_vector(site_it->point(), p));
+        if (!res) return std::nullopt;
+        ed_out = res->second;
+
+        FT weight = 1.0 / squared_distance(Point_2(ORIGIN), res->first);
+        FT d = approximate_sqrt(squared_distance(p, site_it->point()) * weight);
+        return d;
+    }
+
     FT find_nearest_site(const Point_2& p, Cone_descriptor& cone) const {
         FT d_min;
         bool init = true;
 
         for (auto site_it = m_sites.begin(); site_it != m_sites.end(); ++site_it) {
-            auto res = site_it->metric()->any_intersection(construct_vector(site_it->point(), p));
+            Metric_edge_iterator ed;
+            auto res = distance(site_it, p, ed);
             if (!res) continue;
-            auto [pm, ed] = *res;
-            FT weight = 1.0 / squared_distance(Point_2(ORIGIN), pm);
-
-            auto d = approximate_sqrt(squared_distance(p, site_it->point()) * weight);
+            FT d = *res;
             if (d < d_min || init) {
                 d_min = d;
                 cone.set_site(site_it);
@@ -739,6 +749,47 @@ class SSM_voronoi_diagram {
         //      << ", time = " << i_trace_timer.time() << "s, speed = " << i_trace_timer.time() /
         //      i_trace_timer.intervals()
         //      << "s/trace" << std::endl;
+    }
+
+    template <class... Ts>
+    struct overloaded : Ts... {
+        using Ts::operator()...;
+    };
+    // explicit deduction guide (not needed as of C++20)
+    template <class... Ts>
+    overloaded(Ts...) -> overloaded<Ts...>;
+
+    bool check_voronoi_diagram(FT eps = 1e-6) const {
+        for (auto vd : vertices(m_voronoi->graph)) {
+            std::visit(overloaded{
+                           [&, this](const Boundary_vertex_info& info) {
+                               Point_2 p = get(m_voronoi->vpm, vd);
+
+                               Cone_descriptor k_nearest;
+                               find_nearest_site(p, k_nearest);
+                               CGAL_assertion(k_nearest == info.k);
+                           },
+                           [](const Boundary_cone_info& info) {},
+                           [&, this](const Boundary_bisector_info& info) {
+                               Point_2 p = get(m_voronoi->vpm, vd);
+                               auto [ed, k0, k1] = info;
+                               Metric_edge_iterator ed0, ed1;
+                               auto d0 = distance(k0.site(), p, ed0);
+                               auto d1 = distance(k1.site(), p, ed1);
+
+                               CGAL_assertion(ed0 == k0.edge() || ed1 == k1.edge());
+                               CGAL_assertion(d0 && d1 && abs(*d0 - *d1) < eps);
+
+                               Cone_descriptor k_nearest;
+                               find_nearest_site(p, k_nearest);
+                               CGAL_assertion(k_nearest == k0 || k_nearest == k1);
+                           },
+                           [](const Two_site_bisector_info& info) {},
+                           [](const Three_site_bisector_info& info) {},
+                       },
+                       get(m_voronoi->vertex_info_map, vd));
+        }
+        return true;
     }
 #pragma endregion
 
@@ -978,7 +1029,7 @@ class SSM_voronoi_diagram {
 
     Line_2 get_bisector(const Cone_descriptor& k0, const Cone_descriptor& k1) {
         Line_2 l0 = construct_line(*(k0.edge())), l1 = construct_line(*(k1.edge()));
-        Vector_2 nd0 = orthogonal_vector(l0) / abs(cc(l0)), nd1 = orthogonal_vector(l1) / abs(cc(l1));
+        Vector_2 nd0 = orthogonal_vector(l0) / cc(l0), nd1 = orthogonal_vector(l1) / cc(l1);
         Vector_2 AB = nd0 - nd1;
         FT C = scalar_product(nd1, construct_vector(ORIGIN, k1.site()->point())) -
                scalar_product(nd0, construct_vector(ORIGIN, k0.site()->point()));
