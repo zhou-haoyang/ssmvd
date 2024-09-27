@@ -554,7 +554,7 @@ class SSM_restricted_voronoi_diagram {
     SSM_restricted_voronoi_diagram(const Surface_mesh &mesh)
         : SSM_restricted_voronoi_diagram(mesh, get(vertex_point, mesh), get(face_index, mesh), get(edge_index, mesh)) {}
 
-    void add_site(const Point_3 &p, index_t metric_idx) { sites.push_back({p, metric_idx}); }
+    void add_site(const Point_3 &p, index_t metric_idx) { m_sites.push_back({p, metric_idx}); }
 
     /**
      * @brief Add a metric attached to sites added later.
@@ -566,38 +566,42 @@ class SSM_restricted_voronoi_diagram {
      * @return index_t
      */
     index_t add_metric(Metric_polyhedron m, Metric_vertex_point_pmap vpm, Metric_face_index_pmap fim) {
-        auto idx = metrics.size();
-        metrics.emplace_back(std::move(m), std::move(vpm), std::move(fim));
+        auto idx = m_metrics.size();
+        m_metrics.emplace_back(std::move(m), std::move(vpm), std::move(fim));
         return idx;
     }
 
     index_t add_metric(Metric_polyhedron m) {
-        auto idx = metrics.size();
-        metrics.emplace_back(std::move(m));
+        auto idx = m_metrics.size();
+        m_metrics.emplace_back(std::move(m));
         return idx;
     }
 
-    void reserve_sites(std::size_t n) { sites.reserve(n); }
+    void reserve_sites(std::size_t n) { m_sites.reserve(n); }
 
-    void reserve_metrics(std::size_t n) { metrics.reserve(n); }
+    void reserve_metrics(std::size_t n) { m_metrics.reserve(n); }
 
-    void clear_sites() { sites.clear(); }
+    void clear_sites() { m_sites.clear(); }
 
-    void clear_metrics() { metrics.clear(); }
+    void clear_metrics() { m_metrics.clear(); }
 
-    std::size_t num_sites() const { return sites.size(); }
+    std::size_t num_sites() const { return m_sites.size(); }
 
-    std::size_t num_metrics() const { return metrics.size(); }
+    std::size_t num_metrics() const { return m_metrics.size(); }
 
     std::size_t num_i_traces() const { return i_traces.size(); }
 
-    auto site_cbegin() const { return sites.begin(); }
+    auto site_cbegin() const { return m_sites.begin(); }
 
-    auto site_cend() const { return sites.end(); }
+    auto site_cend() const { return m_sites.end(); }
 
-    auto metric_cbegin() const { return metrics.begin(); }
+    auto metric_cbegin() const { return m_metrics.begin(); }
 
-    auto metric_cend() const { return metrics.end(); }
+    auto metric_cend() const { return m_metrics.end(); }
+
+    auto &metrics() { return m_metrics; }
+
+    auto &metrics() const { return m_metrics; }
 
     auto i_trace_cbegin() const { return i_traces.begin(); }
 
@@ -635,12 +639,12 @@ class SSM_restricted_voronoi_diagram {
 
     bool write_sites(std::ostream &os) const {
         os << num_metrics() << std::endl;
-        for (const auto &m : metrics) {
+        for (const auto &m : m_metrics) {
             if (!IO::write_OFF(os, m.graph)) return false;
         }
 
         os << num_sites() << std::endl;
-        for (const auto &s : sites) {
+        for (const auto &s : m_sites) {
             os << s.point.x() << " " << s.point.y() << " " << s.point.z() << " " << s.metric_idx << std::endl;
         }
 
@@ -648,19 +652,19 @@ class SSM_restricted_voronoi_diagram {
     }
 
     std::pair<Site &, Metric_data &> site(index_t idx) {
-        auto &c = sites[idx];
-        return {c, metrics[c.metric_idx]};
+        auto &c = m_sites[idx];
+        return {c, m_metrics[c.metric_idx]};
     }
 
     std::pair<const Site &, const Metric_data &> site(index_t idx) const {
-        auto &c = sites[idx];
-        return {c, metrics[c.metric_idx]};
+        auto &c = m_sites[idx];
+        return {c, m_metrics[c.metric_idx]};
     }
 
     T find_nearest_site(const Point_3 &p, Cone_descriptor &m_cone) const {
         T d_min = INF;
 
-        for (index_t i = 0; i < sites.size(); ++i) {
+        for (index_t i = 0; i < m_sites.size(); ++i) {
             auto [c, m] = site(i);
 
             auto res = metric_any_intersection(m.data, p - c.point);
@@ -732,7 +736,7 @@ class SSM_restricted_voronoi_diagram {
             Plane_3 bi_plane_min;
             Cone_descriptor k1_min;
 
-            for (index_t k1_site = 0; k1_site < sites.size(); ++k1_site) {
+            for (index_t k1_site = 0; k1_site < m_sites.size(); ++k1_site) {
                 if (k1_site == k0.site_idx) {
                     continue;
                 }
@@ -977,8 +981,8 @@ class SSM_restricted_voronoi_diagram {
    protected:
 #pragma region PrivateVariables
     Traits traits;
-    std::vector<Site> sites;
-    std::vector<Metric_data> metrics;
+    std::vector<Site> m_sites;
+    std::vector<Metric_data> m_metrics;
 
     const Surface_mesh &mesh;
     Mesh_vertex_point_pmap vpm;
@@ -1182,8 +1186,8 @@ class SSM_restricted_voronoi_diagram {
 
     void find_all_segment_cone_intersections(const Pline_3 &segment, FT tmin, FT tmax,
                                              std::vector<Segment_cone_intersections> &res) const {
-        res.resize(sites.size());
-        for (index_t site_idx = 0; site_idx < sites.size(); ++site_idx) {
+        res.resize(m_sites.size());
+        for (index_t site_idx = 0; site_idx < m_sites.size(); ++site_idx) {
             find_segment_cone_intersections(site_idx, segment, tmin, tmax, res[site_idx]);
         }
     }
@@ -1246,7 +1250,7 @@ class SSM_restricted_voronoi_diagram {
         Plane_3 bi_plane_min;
         Cone_descriptor k2_min;
 
-        for (index_t k2_site = 0; k2_site < sites.size(); ++k2_site) {
+        for (index_t k2_site = 0; k2_site < m_sites.size(); ++k2_site) {
             if (k2_site == tr.k0.site_idx || k2_site == tr.k1.site_idx) {
                 continue;
             }
