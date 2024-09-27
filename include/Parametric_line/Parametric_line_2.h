@@ -66,9 +66,7 @@ class Parametric_line_traits_2 {
             return Parametric_line_2(p0, p1 - p0);
         }
 
-        Parametric_line_2 operator()(const Segment_2 &s) const {
-            return Parametric_line_2(s.source(), s.target() - s.source());
-        }
+        Parametric_line_2 operator()(const Segment_2 &s) const { return Parametric_line_2(s.source(), s.target()); }
     };
 
     struct Construct_opposite_parametric_line_2 {
@@ -104,8 +102,8 @@ class Parametric_line_traits_2 {
             }
 
             FT denorm = 1.0 / det;
-            FT t0 = denorm * determinant(d0, dp);
-            FT t1 = denorm * determinant(d1, dp);
+            FT t0 = denorm * determinant(dp, d1);
+            FT t1 = denorm * determinant(dp, d0);
 
             return std::make_pair(t0, t1);
         }

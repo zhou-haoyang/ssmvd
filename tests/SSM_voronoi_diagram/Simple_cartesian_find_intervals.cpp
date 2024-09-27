@@ -35,7 +35,7 @@ class SSM_voronoi_diagram_test : public SSM_voronoi_diagram, public ::testing::T
         add_site(Point_2(1, 1), add_metric(std::move(metric)));
     }
 
-    std::vector<FT> find_interval_endpoints(Site_iterator site, const Parametric_line_2 &segment, FT tmin,
+    std::vector<FT> find_interval_endpoints(Site_const_iterator site, const Parametric_line_2 &segment, FT tmin,
                                             std::optional<FT> tmax = std::nullopt) {
         if (tmax && *tmax < tmin) return {};
 
@@ -43,7 +43,7 @@ class SSM_voronoi_diagram_test : public SSM_voronoi_diagram, public ::testing::T
         auto d = construct_vector(segment);
         std::vector<FT> res{tmin};
         for (auto edge : site->metric()->polygon().edges()) {
-            auto isect = intersect(p, d, construct_vector(CGAL::ORIGIN, construct_source(edge)), tmin, tmax);
+            auto isect = intersect_ray(p, d, construct_vector(CGAL::ORIGIN, construct_source(edge)), tmin, tmax);
             if (isect && !std::holds_alternative<Colinear>(*isect)) {
                 auto [t, _] = std::get<std::pair<FT, FT>>(*isect);
                 res.push_back(t);
@@ -56,7 +56,7 @@ class SSM_voronoi_diagram_test : public SSM_voronoi_diagram, public ::testing::T
         return res;
     }
 
-    void check_interval_endpoints(Site_iterator site, const Parametric_line_2 &segment, FT tmin,
+    void check_interval_endpoints(Site_const_iterator site, const Parametric_line_2 &segment, FT tmin,
                                   std::optional<FT> tmax = std::nullopt) {
         Intervals res;
         find_intervals(site, segment, res, tmin, tmax);

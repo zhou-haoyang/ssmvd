@@ -10,7 +10,11 @@ FetchContent_MakeAvailable(googletest)
 
 include(GoogleTest)
 
-add_executable(ssm_test SSM_voronoi_diagram/Simple_cartesian_find_intervals.cpp)
+add_executable(
+    ssm_test
+    SSM_voronoi_diagram/Simple_cartesian_find_intervals.cpp
+    SSM_voronoi_diagram/Simple_cartesian_random.cpp
+)
 
 # link the Google test infrastructure, mocking library, and a default main function to
 # the test executable.  Remove g_test_main if writing your own main function.
