@@ -13,7 +13,7 @@
 
 #include <CGAL/Simple_cartesian.h>
 #include <CGAL/AABB_tree.h>
-#include <CGAL/AABB_traits.h>
+#include <CGAL/AABB_traits_3.h>
 #include <CGAL/Polyhedron_3.h>
 #include <CGAL/Polyhedron_items_with_id_3.h>
 #include <CGAL/boost/graph/Seam_mesh.h>
@@ -69,7 +69,7 @@ typedef CGAL::Surface_mesh<Kernel::Point_3> Voronoi_diagram;
 namespace RVD = CGAL::SSM_restricted_voronoi_diagram;
 
 typedef CGAL::AABB_face_graph_triangle_primitive<Metric_polyhedron> Primitive;
-typedef CGAL::AABB_traits<Kernel, Primitive> AABB_traits;
+typedef CGAL::AABB_traits_3<Kernel, Primitive> AABB_traits;
 typedef CGAL::AABB_tree<AABB_traits> Tree;
 
 // typedef RVD::AABB_metric_traits<Kernel, Tree> Metric_traits;
@@ -491,8 +491,8 @@ class GVDApp : public App {
         tex_site = Eigen::MatrixX<Index>::Constant(tex_w, tex_h, -1);
         tex_dist = Eigen::MatrixX<FT>::Zero(tex_w, tex_h);
 
-        auto [uv_map, uv_exist] = sm.property_map<SM_halfedge_descriptor, Point_2>("h:uv");
-        assert(uv_exist);
+        auto uv_map = *sm.property_map<SM_halfedge_descriptor, Point_2>("h:uv");
+        // assert(uv_exist);
 
         for (auto face : sm.faces()) {
             auto h0 = sm.halfedge(face), h1 = sm.next(h0), h2 = sm.next(h1);
@@ -600,9 +600,9 @@ class GVDApp : public App {
         // }
 
         if (ImGui::CollapsingHeader("VD", ImGuiTreeNodeFlags_DefaultOpen)) {
-            int verbosity_level = gvd.vout.output_level();
+            int verbosity_level = gvd.verbosity();
             if (ImGui::InputInt("Verbosity Level", &verbosity_level)) {
-                gvd.vout.output_level(verbosity_level);
+                gvd.set_verbosity(verbosity_level);
             }
 
             if (ImGui::Button("Open Mesh")) {

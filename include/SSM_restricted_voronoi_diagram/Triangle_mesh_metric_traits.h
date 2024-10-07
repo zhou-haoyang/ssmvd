@@ -4,7 +4,6 @@
 #include <CGAL/Origin.h>
 #include <CGAL/boost/graph/properties.h>
 #include <boost/graph/graph_traits.hpp>
-#include <boost/variant/get.hpp>
 #include <optional>
 
 namespace CGAL::SSM_restricted_voronoi_diagram {
@@ -51,8 +50,7 @@ class Triangle_mesh_metric_traits {
             for (const auto& [fd, t] : data) {
                 auto res = intersection(ray, t);
                 if (!res) continue;
-                auto obj = *res;
-                auto pm = boost::get<Point_3>(&obj);
+                auto pm = std::get_if<Point_3>(&*res);
                 if (!pm) continue;
                 return std::make_pair(*pm, fd);
             }

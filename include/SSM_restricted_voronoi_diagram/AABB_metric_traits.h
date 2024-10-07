@@ -2,7 +2,6 @@
 #define SSM_RESTRICTED_VORONOI_DIAGRAM_AABB_METRIC_TRAITS_H
 
 #include <CGAL/Origin.h>
-#include <boost/variant/get.hpp>
 #include <optional>
 
 namespace CGAL::SSM_restricted_voronoi_diagram {
@@ -33,7 +32,7 @@ class AABB_metric_traits {
             if (!res) return std::nullopt;
 
             auto [obj, fd] = *res;
-            auto pm = boost::get<Point_3>(&obj);
+            auto pm = std::get<Point_3>(&obj);
             if (!pm) return std::nullopt;
 
             return std::make_pair(*pm, fd);
