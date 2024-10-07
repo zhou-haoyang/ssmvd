@@ -25,7 +25,8 @@ class Polygon_metric_traits {
             for (auto it = p.edges_begin(); it != p.edges_end(); ++it) {
                 auto isect = CGAL::intersection(Ray_2(ORIGIN, d), *it);
                 if (isect) {
-                    return std::make_pair(boost::get<Point_2>(*isect), it);
+                    // The intersection can not be segment here for a valid metric
+                    return std::make_pair(std::get<Point_2>(*isect), it);
                 }
             }
             return std::nullopt;

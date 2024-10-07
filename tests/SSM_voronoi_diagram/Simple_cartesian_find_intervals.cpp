@@ -1,9 +1,9 @@
-#include <SSM_voronoi_diagram.h>
-#include <SSM_voronoi_diagram/Polygon_metric_traits.h>
-
 #include <CGAL/Simple_cartesian.h>
 #include <CGAL/Surface_mesh/Surface_mesh.h>
 #include <CGAL/Polygon_2.h>
+
+#include <SSM_voronoi_diagram.h>
+#include <SSM_voronoi_diagram/Polygon_metric_traits.h>
 
 #include <gtest/gtest.h>
 #include <optional>
