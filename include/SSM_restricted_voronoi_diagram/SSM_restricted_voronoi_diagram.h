@@ -364,6 +364,10 @@ class SSM_restricted_voronoi_diagram {
         mesh_halfedge_descriptor face_hd;
         mesh_halfedge_descriptor prev_hd;
         Cone_descriptor k0, k1, k_prev;
+        /**
+         * @brief When the previous itrace goes through a cone and enter the neighboring cone,
+         * the metric_prev_hd is the halfedge of current metric that the previous itrace enter the cone.
+         */
         metric_halfedge_descriptor metric_prev_hd;
         vd_vertex_descriptor v_vd;
     };
