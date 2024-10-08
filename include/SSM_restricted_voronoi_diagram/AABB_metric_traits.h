@@ -32,7 +32,7 @@ class AABB_metric_traits {
             if (!res) return std::nullopt;
 
             auto [obj, fd] = *res;
-            auto pm = std::get<Point_3>(&obj);
+            auto pm = std::get_if<Point_3>(&obj);
             if (!pm) return std::nullopt;
 
             return std::make_pair(*pm, fd);
