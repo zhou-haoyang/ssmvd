@@ -12,6 +12,13 @@ include(FetchContent)
 option(SSM_INCLUDE_CGAL "Include CGAL" OFF)
 option(SSM_BUILD_APP "Build the sample GUI" ON)
 option(SSM_BUILD_TESTS "Build tests" ON)
+option(SSM_BUILD_EXAMPLES "Build examples" ON)
+
+set(CGAL_FIND_COMPONENTS Core)
+
+if(SSM_BUILD_EXAMPLES)
+  list(APPEND CGAL_FIND_COMPONENTS Qt6)
+endif()
 
 if(SSM_INCLUDE_CGAL)
   FetchContent_Declare(
@@ -24,7 +31,7 @@ if(SSM_INCLUDE_CGAL)
 
   include("${cgal_SOURCE_DIR}/CGALConfig.cmake")
 else()
-  find_package(CGAL 6.0 REQUIRED)
+  find_package(CGAL 6.0 REQUIRED COMPONENTS ${CGAL_FIND_COMPONENTS})
 endif()
 
 target_link_libraries(ssm INTERFACE CGAL::CGAL)
@@ -47,6 +54,10 @@ if(SSM_BUILD_APP)
   find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 
   target_link_libraries(ssm_app PRIVATE ssm igl::core igl::opengl igl::glfw igl::imgui igl::stb Eigen3::Eigen)
+endif()
+
+if(SSM_BUILD_EXAMPLES)
+  add_subdirectory(examples)
 endif()
 
 if((CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME OR SSM_BUILD_TESTS)
