@@ -1,0 +1,1 @@
+package_add_example(simple_viewer simple_viewer.cpp)
