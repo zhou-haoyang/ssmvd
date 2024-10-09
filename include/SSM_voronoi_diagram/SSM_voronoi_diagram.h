@@ -197,7 +197,11 @@ class SSM_voronoi_diagram {
             return vd;
         }
 
-        Vector_2 normalized(const Vector_2& v) const { return v / approximate_sqrt(v.squared_length()); }
+        Vector_2 normalized(const Vector_2& v) const {
+            FT n = v.squared_length();
+            CGAL_assertion(!is_zero(n));
+            return v / approximate_sqrt(n);
+        }
 
         void insert_halfedge_loop(vd_halfedge_descriptor hd) {
             auto vt = target(hd, graph), vs = source(hd, graph);
@@ -210,7 +214,8 @@ class SSM_voronoi_diagram {
             if (hd_cur != opposite(next(hd_cur, graph), graph)) {
                 // At least 2 halfedges around the target vertex
                 auto pt = get(vpm, vt), ps = get(vpm, vs);
-                auto v = ps - pt;
+                auto v = normalized(ps - pt);
+                // auto v = ps - pt;
 
                 auto v_cur = normalized(get(vpm, source(hd_cur, graph)) - pt);
 
@@ -244,6 +249,7 @@ class SSM_voronoi_diagram {
 
         vd_halfedge_descriptor connect(vd_vertex_descriptor v0, vd_vertex_descriptor v1, vd_face_descriptor fd01,
                                        vd_face_descriptor fd10) {
+            CGAL_precondition(v0 != v1);
             if (halfedge(v1, graph) != vd_graph_traits::null_halfedge()) {
                 for (auto hd : halfedges_around_target(v1, graph)) {
                     if (source(hd, graph) == v0) return hd;
