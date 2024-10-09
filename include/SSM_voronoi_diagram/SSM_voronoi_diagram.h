@@ -597,8 +597,8 @@ class SSM_voronoi_diagram {
         return d_min;
     }
 
-    auto trace_boundary(Boundary_edge_iterator b_ed, Cone_descriptor k0, Cone_descriptor k_prev,
-                        vd_vertex_descriptor prev_vd, bool add_border_edges = false, bool add_cone_vertices = false,
+    auto trace_boundary(Boundary_edge_iterator b_ed, Cone_descriptor k0, vd_vertex_descriptor prev_vd,
+                        bool add_border_edges = false, bool add_cone_vertices = false,
                         vd_face_descriptor fd0 = vd_graph_traits::null_face(),
                         vd_face_descriptor fd1 = vd_graph_traits::null_face()) {
         auto b_line = construct_parametric_line(*b_ed);
@@ -610,6 +610,11 @@ class SSM_voronoi_diagram {
         auto& intervals = intervals_map[site_index(k0.site())];
         auto interval_it = intervals.find_cone(k0.edge());
         CGAL_assertion_msg(interval_it != intervals.end(), "Initial cone k0 not found in intervals");
+
+        // k_prev holds the previous cone descriptor to avoid tracing the same bisector twice,
+        // however the bisector may intersect two boundary segments. Hence k_prev is only valid
+        // within single boundary tracing
+        Cone_descriptor k_prev = null_cone();
 
         for (;;) {
             auto [_, interval] = *interval_it;
@@ -714,7 +719,7 @@ class SSM_voronoi_diagram {
             }
         }
 
-        return std::make_tuple(k0, k_prev, prev_vd);
+        return std::make_pair(k0, prev_vd);
     }
 
     void trace_all_boundaries(Boundary_edge_iterator b_ed0, Boundary_edge_iterator b_ed1, bool add_border_edges = true,
@@ -724,7 +729,6 @@ class SSM_voronoi_diagram {
         find_nearest_site(construct_source(*b_ed), k0);
 
         vd_vertex_descriptor prev_vd = vd_graph_traits::null_vertex(), vd0;
-        Cone_descriptor k_prev = null_cone();
         for (; b_ed != b_ed1; ++b_ed) {
             if (add_border_edges) {
                 auto v_vd = m_voronoi->add_vertex(construct_source(*b_ed), Boundary_vertex_info{b_ed, k0});
@@ -735,9 +739,8 @@ class SSM_voronoi_diagram {
                 }
                 prev_vd = v_vd;
             }
-            std::tie(k0, k_prev, prev_vd) =
-                trace_boundary(b_ed, k0, k_prev, prev_vd, add_border_edges, add_cone_vertices, m_dummy_face,
-                               vd_graph_traits::null_face());
+            std::tie(k0, prev_vd) = trace_boundary(b_ed, k0, prev_vd, add_border_edges, add_cone_vertices, m_dummy_face,
+                                                   vd_graph_traits::null_face());
         }
         if (add_border_edges) {
             m_voronoi->connect(prev_vd, vd0, m_dummy_face, vd_graph_traits::null_face());
