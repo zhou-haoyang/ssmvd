@@ -1230,7 +1230,7 @@ class SSM_voronoi_diagram {
                 d = opposite_vector(d);
             }
             auto bisector = construct_parametric_line(p, d);
-            m_i_traces.emplace_back(bisector, k0_next, k1_next, k1_prev, v_vd);
+            m_i_traces.emplace_back(bisector, k0_next, k1_next, k1_prev, v_vd, k_next_info->type);
         } else {
             CGAL_assertion_msg(false, "Unbounded interval trace");
         }
