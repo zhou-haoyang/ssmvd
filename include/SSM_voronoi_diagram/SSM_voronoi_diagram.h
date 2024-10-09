@@ -533,6 +533,17 @@ class SSM_voronoi_diagram {
         reset();
     }
 
+    /// Accessors
+    auto& boundary() const { return m_boundary; }
+    auto& traits() const { return m_traits; }
+
+    auto sites() const { return Iterator_range(m_sites.cbegin(), m_sites.cend()); }
+    auto metrics() const { return Iterator_range(m_metrics.cbegin(), m_metrics.cend()); }
+    auto i_traces() const { return Iterator_range(m_i_traces.cbegin(), m_i_traces.cend()); }
+
+    const auto& voronoi_diagram() const { return *m_voronoi; }
+    Const_voronoi_diagram_ptr voronoi_diagram_ptr() const { return m_voronoi; }
+
     Metric_iterator add_metric(Metric m) { return m_metrics.emplace(m_metrics.end(), std::move(m), m_traits); }
 
     Site_const_iterator add_site(Point_2 p, Metric_iterator m) {
