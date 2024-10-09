@@ -63,7 +63,7 @@ struct Graphics_scene_options_vd : public CGAL::Graphics_scene_options<Voronoi_d
     }
 };
 
-int main() {
+int main(int argc, char **argv) {
     CGAL::get_default_random() = CGAL::Random(0);
 
     Polygon_2 boundary;
@@ -79,16 +79,19 @@ int main() {
     metric.push_back(Point_2(1, 0));
     metric.push_back(Point_2(0, 1));
     metric.push_back(Point_2(-1, 0));
-    CGAL::perturb_points_2(metric.vertices_begin(), metric.vertices_end(), 0.1);
-
-    std::vector<Point_2> sites;
-    CGAL::Random_points_in_square_2<Point_2> gen;
-    std::copy_n(gen, 30, std::back_inserter(sites));
-
     auto m = ssm_vd.add_metric(metric);
-    for (auto &site : sites) {
-        ssm_vd.add_site(site, m);
-    }
+    // CGAL::perturb_points_2(metric.vertices_begin(), metric.vertices_end(), 0.1);
+
+    auto random_sites = [&](size_t n) {
+        std::vector<Point_2> sites;
+        CGAL::Random_points_in_square_2<Point_2> gen(2);
+        std::copy_n(gen, n, std::back_inserter(sites));
+
+        ssm_vd.clear_sites();
+        for (auto &site : sites) {
+            ssm_vd.add_site(site, m);
+        }
+    };
 
     CGAL::Graphics_scene scene;
 
@@ -104,10 +107,10 @@ int main() {
             scene.add_segment(voronoi.vpm[v0], voronoi.vpm[v1], CGAL::IO::red());
         }
 
-        int i = 0;
-        for (auto &p : sites) {
-            scene.add_point(p, CGAL::IO::red());
-            scene.add_text(p, std::format("c{}", i++));
+        size_t i = 0;
+        for (auto &c : ssm_vd.sites()) {
+            scene.add_point(c.point(), CGAL::IO::red());
+            scene.add_text(c.point(), std::format("c{}", i++));
         }
 
         for (auto vd : CGAL::vertices(voronoi.graph)) {
@@ -119,12 +122,21 @@ int main() {
         }
     };
 
+    size_t n = argc > 1 ? std::stoi(argv[1]) : 30;
+    random_sites(n);
+    update();
+
     CGAL::Qt::QApplication_and_basic_viewer app(scene, "Step Building");
     if (app) {
         app.basic_viewer().on_key_pressed = [&](QKeyEvent *e, CGAL::Qt::Basic_viewer *basic_viewer) -> bool {
             const ::Qt::KeyboardModifiers modifiers = e->modifiers();
             if (modifiers == Qt::NoButton) {
                 switch (e->key()) {
+                    case Qt::Key_C:
+                        random_sites(n);
+                        update();
+                        basic_viewer->redraw();
+                        break;
                     case Qt::Key_B:
                         ssm_vd.trace_all_boundaries(true, true);
                         update();
@@ -154,6 +166,7 @@ int main() {
         };
 
         // Here we add shortcut descriptions
+        app.basic_viewer().setKeyDescription(::Qt::Key_C, "Random sites");
         app.basic_viewer().setKeyDescription(::Qt::Key_B, "Trace all boundaries");
         app.basic_viewer().setKeyDescription(::Qt::Key_Space, "Step");
         app.basic_viewer().setKeyDescription(::Qt::Key_R, "Reset");
