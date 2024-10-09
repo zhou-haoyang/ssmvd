@@ -8,56 +8,114 @@
 
 #include <gtest/gtest.h>
 #include <algorithm>
-#include <optional>
-#include <variant>
 #include <vector>
 
 namespace VD = CGAL::SSM_voronoi_diagram;
 
 typedef CGAL::Simple_cartesian<double> Kernel;
 
+using FT = typename Kernel::FT;
 typedef CGAL::Surface_mesh<Kernel::Point_2> Voronoi_diagram;
 typedef VD::Polygon_metric_traits<Kernel> Metric_traits;
 typedef VD::SSM_voronoi_diagram_traits<Kernel, Voronoi_diagram, Metric_traits> Traits;
 typedef VD::SSM_voronoi_diagram<Traits> SSM_voronoi_diagram;
 using Point_2 = typename Kernel::Point_2;
 using Polygon_2 = CGAL::Polygon_2<Kernel>;
+using Metric_iterator = typename SSM_voronoi_diagram::Metric_iterator;
 typedef CGAL::Creator_uniform_2<double, Point_2> Creator;
 
-TEST(Simple_cartesian_random, test) {
+void make_rect(Polygon_2 &p) {
+    p.push_back(Point_2(-1, -1));
+    p.push_back(Point_2(1, -1));
+    p.push_back(Point_2(1, 1));
+    p.push_back(Point_2(-1, 1));
+}
+
+void make_cross(Polygon_2 &p) {
+    p.push_back(Point_2(0, -1));
+    p.push_back(Point_2(1, 0));
+    p.push_back(Point_2(0, 1));
+    p.push_back(Point_2(-1, 0));
+    // CGAL::perturb_points_2(p.begin(), p.end(), 0.1);
+}
+
+void test_b_trace(FT a, size_t n, size_t n_sites) {
+    CGAL::get_default_random() = CGAL::Random(0);
+
     Polygon_2 boundary;
-    boundary.push_back(Point_2(-1, -1));
-    boundary.push_back(Point_2(1, -1));
-    boundary.push_back(Point_2(1, 1));
-    boundary.push_back(Point_2(-1, 1));
+    make_rect(boundary);
 
     SSM_voronoi_diagram vd(boundary);
 
     Polygon_2 metric;
-    metric.push_back(Point_2(0, -1));
-    metric.push_back(Point_2(1, 0));
-    metric.push_back(Point_2(0, 1));
-    metric.push_back(Point_2(-1, 0));
-    CGAL::perturb_points_2(metric.vertices_begin(), metric.vertices_end(), 0.1);
-
-    std::vector<Point_2> sites;
-    CGAL::Random_points_on_square_2<Point_2> gen;
-    std::copy_n(gen, 30, std::back_inserter(sites));
-    // CGAL::points_on_square_grid_2(1, 100, std::back_inserter(sites), Creator());
-    CGAL::perturb_points_2(sites.begin(), sites.end(), 0.1);
-    // for (auto c : sites) {
-    //     std::cout << c << std::endl;
-    // }
-
+    make_cross(metric);
     auto m = vd.add_metric(metric);
-    for (auto &site : sites) {
-        vd.add_site(site, m);
+
+    for (size_t i = 0; i < n; i++) {
+        std::vector<Point_2> sites;
+        CGAL::Random_points_in_square_2<Point_2> gen(a);
+        std::copy_n(gen, n_sites, std::back_inserter(sites));
+
+        vd.clear_sites();
+        for (auto &site : sites) {
+            vd.add_site(site, m);
+        }
+
+        vd.reset();
+        vd.trace_all_boundaries();
+
+        ASSERT_TRUE(vd.check_voronoi_diagram());
     }
+}
 
-    // vd.trace_all_boundaries(boundary.edges_begin(), ++boundary.edges_begin(), true, true);
-    vd.trace_all_boundaries(true, true);
+void test_build(FT a, size_t n, size_t n_sites) {
+    CGAL::get_default_random() = CGAL::Random(0);
 
-    // vd.build();
+    Polygon_2 boundary;
+    make_rect(boundary);
 
-    ASSERT_TRUE(vd.check_voronoi_diagram());
+    SSM_voronoi_diagram vd(boundary);
+
+    Polygon_2 metric;
+    make_cross(metric);
+    auto m = vd.add_metric(metric);
+
+    for (size_t i = 0; i < n; i++) {
+        std::vector<Point_2> sites;
+        CGAL::Random_points_in_square_2<Point_2> gen(a);
+        std::copy_n(gen, n_sites, std::back_inserter(sites));
+
+        vd.clear_sites();
+        for (auto &site : sites) {
+            vd.add_site(site, m);
+        }
+
+        vd.build();
+
+        ASSERT_TRUE(vd.check_voronoi_diagram());
+    }
+}
+
+TEST(Simple_cartesian_random, trace_boundary) {
+    test_b_trace(1, 100, 30);
+}
+
+TEST(Simple_cartesian_random, trace_boundary_outside) {
+    test_b_trace(2, 100, 30);
+}
+
+TEST(Simple_cartesian_random, trace_boundary_outside_2) {
+    test_b_trace(2, 100, 2);
+}
+
+TEST(Simple_cartesian_random, build) {
+    test_build(1, 100, 30);
+}
+
+TEST(Simple_cartesian_random, build_outside) {
+    test_build(2, 100, 30);
+}
+
+TEST(Simple_cartesian_random, build_outside_2) {
+    test_build(2, 100, 2);
 }
