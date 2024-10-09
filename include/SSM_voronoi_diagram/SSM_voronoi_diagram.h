@@ -503,12 +503,18 @@ class SSM_voronoi_diagram {
         Parametric_line_2 bisector;
         Cone_descriptor k0, k1;
         std::optional<Cone_descriptor> k_prev;
-        Endpoint_type prev_type;
         vd_vertex_descriptor v_vd;
+        Endpoint_type prev_type;
 
         Internal_trace(Parametric_line_2 bi, Cone_descriptor k0, Cone_descriptor k1,
-                       std::optional<Cone_descriptor> k_prev, vd_vertex_descriptor v_prev)
-            : bisector(std::move(bi)), k0(std::move(k0)), k1(std::move(k1)), k_prev(std::move(k_prev)), v_vd(v_prev) {}
+                       std::optional<Cone_descriptor> k_prev, vd_vertex_descriptor v_prev,
+                       Endpoint_type prev_type = UNKNOWN)
+            : bisector(std::move(bi)),
+              k0(std::move(k0)),
+              k1(std::move(k1)),
+              k_prev(std::move(k_prev)),
+              v_vd(v_prev),
+              prev_type(prev_type) {}
     };
 
     struct Boundary_trace {
@@ -1092,10 +1098,10 @@ class SSM_voronoi_diagram {
         // Clip the bisector with the cone k0 and k1
         int next_cone_idx = -1;
         std::optional<Next_interval_info> k_next_info;
-        auto info0 = find_next_interval(tr.k0, tr.bisector,
-                                        tr.k_prev == std::make_optional(tr.k0) ? tr.prev_type : UNKNOWN, tmin);
-        auto info1 = find_next_interval(tr.k1, tr.bisector,
-                                        tr.k_prev == std::make_optional(tr.k1) ? tr.prev_type : UNKNOWN, tmin);
+        auto info0 = find_next_interval(
+            tr.k0, tr.bisector, (tr.k_prev && (tr.k_prev->site() == tr.k0.site())) ? tr.prev_type : UNKNOWN, tmin);
+        auto info1 = find_next_interval(
+            tr.k1, tr.bisector, (tr.k_prev && (tr.k_prev->site() == tr.k1.site())) ? tr.prev_type : UNKNOWN, tmin);
         if (info0) {
             k_next_info = info0;
             next_cone_idx = 0;
