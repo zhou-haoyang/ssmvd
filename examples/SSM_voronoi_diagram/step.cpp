@@ -111,6 +111,10 @@ int main(int argc, char **argv) {
         for (auto &c : ssm_vd.sites()) {
             scene.add_point(c.point(), CGAL::IO::red());
             scene.add_text(c.point(), std::format("c{}", i++));
+
+            for (auto m : c.metric()->polygon().vertices()) {
+                scene.add_ray(c.point(), m - CGAL::ORIGIN, CGAL::IO::gray());
+            }
         }
 
         for (auto vd : CGAL::vertices(voronoi.graph)) {
