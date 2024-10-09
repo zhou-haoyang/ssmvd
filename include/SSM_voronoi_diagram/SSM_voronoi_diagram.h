@@ -550,12 +550,23 @@ class SSM_voronoi_diagram {
     const auto& voronoi_diagram() const { return *m_voronoi; }
     Const_voronoi_diagram_ptr voronoi_diagram_ptr() const { return m_voronoi; }
 
-    Metric_iterator add_metric(Metric m) { return m_metrics.emplace(m_metrics.end(), std::move(m), m_traits); }
+    /// Modifiers
+    Metric_iterator add_metric(Metric m) {
+        if (orientation_2(m.begin(), m.end(), m_traits) != COUNTERCLOCKWISE) {
+            m.reverse_orientation();
+        }
+        return m_metrics.emplace(m_metrics.end(), std::move(m), m_traits);
+    }
 
     Site_const_iterator add_site(Point_2 p, Metric_iterator m) {
         return m_sites.emplace(m_sites.end(), std::move(p), m);
     }
 
+    void clear_sites() { m_sites.clear(); }
+
+    void clear_metrics() { m_metrics.clear(); }
+
+    /// VD construction
     std::optional<FT> distance(Site_const_iterator site_it, const Point_2& p, Metric_edge_iterator& ed_out) const {
         auto res = site_it->metric()->any_intersection(construct_vector(site_it->point(), p));
         if (!res) return std::nullopt;
