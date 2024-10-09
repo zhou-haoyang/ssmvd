@@ -657,6 +657,7 @@ class SSM_voronoi_diagram {
                     m_voronoi->connect(prev_vd, v_vd, fd0, fd1);
                 }
                 prev_vd = v_vd;
+                m_b_traces.emplace(v_id, Boundary_trace(v_vd, b_line));
 
                 Vector_2 d = construct_vector(bi_line_min);
                 if (orientation(construct_vector(b_line), d) == RIGHT_TURN) {
@@ -1150,10 +1151,13 @@ class SSM_voronoi_diagram {
         auto [it_begin, it_end] = m_b_traces.equal_range(v_id);
         for (auto it = it_begin; it != it_end; ++it) {
             auto& b_trace = it->second;
+            if (b_trace.v_vd == tr.v_vd) continue;
+
             auto isect = intersect(tr.bisector, b_trace.b_line);
             if (!isect || std::holds_alternative<Colinear>(*isect)) continue;
 
             auto [ts, tb] = std::get<std::pair<FT, FT>>(*isect);
+            if (tb < 0 || tb > 1) continue;
             if (ts < tmin || (tmax && ts >= *tmax)) continue;
 
             FT dist = ts - tmin;
