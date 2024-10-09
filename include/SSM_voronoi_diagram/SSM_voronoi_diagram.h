@@ -767,6 +767,18 @@ class SSM_voronoi_diagram {
         //      << "s/trace" << std::endl;
     }
 
+    void trace_faces() {
+        for (auto hd : halfedges(m_voronoi->graph)) {
+            if (face(hd, m_voronoi->graph) != m_dummy_face) continue;
+            auto fd = add_face(m_voronoi->graph);
+            set_halfedge(fd, hd, m_voronoi->graph);
+            for (auto hd_inner : halfedges_around_face(hd, m_voronoi->graph)) {
+                set_face(hd_inner, fd, m_voronoi->graph);
+            }
+        }
+        remove_face(m_dummy_face, m_voronoi->graph);
+    }
+
     template <class... Ts>
     struct overloaded : Ts... {
         using Ts::operator()...;
@@ -1234,18 +1246,6 @@ class SSM_voronoi_diagram {
         } else {
             CGAL_assertion_msg(false, "Unbounded interval trace");
         }
-    }
-
-    void trace_faces() {
-        for (auto hd : halfedges(m_voronoi->graph)) {
-            if (face(hd, m_voronoi->graph) != m_dummy_face) continue;
-            auto fd = add_face(m_voronoi->graph);
-            set_halfedge(fd, hd, m_voronoi->graph);
-            for (auto hd_inner : halfedges_around_face(hd, m_voronoi->graph)) {
-                set_face(hd_inner, fd, m_voronoi->graph);
-            }
-        }
-        remove_face(m_dummy_face, m_voronoi->graph);
     }
 };
 #pragma endregion
