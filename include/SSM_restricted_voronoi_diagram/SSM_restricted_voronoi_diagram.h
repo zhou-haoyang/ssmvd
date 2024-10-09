@@ -276,7 +276,8 @@ class SSM_restricted_voronoi_diagram {
 
         void print_halfedge_loop(vd_vertex_descriptor v) {
             for (auto hd : halfedges_around_target(v, graph)) {
-                std::cerr << hd << "(" << source(hd, graph) << ", " << target(hd, graph) << ")" << " ";
+                std::cerr << hd << "(" << source(hd, graph) << ", " << target(hd, graph) << ")"
+                          << " ";
             }
             std::cerr << std::endl;
             std::cerr.flush();
@@ -284,7 +285,7 @@ class SSM_restricted_voronoi_diagram {
 
         static Vector_3 normalized(const Vector_3 &v) {
             auto n = v.squared_length();
-            if (is_zero(n)) return v;
+            CGAL_assertion(!is_zero(n));
             return v / approximate_sqrt(n);
         }
 
@@ -299,7 +300,7 @@ class SSM_restricted_voronoi_diagram {
             if (hd_cur != opposite(next(hd_cur, graph), graph)) {
                 // At least 2 halfedges around the target vertex
                 auto pt = get(vpm, vt), ps = get(vpm, vs);
-                auto v = ps - pt;
+                auto v = normalized(ps - pt);
                 // The halfedge loop around the vertex should be clockwise for the halfedge loop around the face
                 // to be counter-clockwise, hence the normal should point inward here
                 auto n = -normalized(get(vertex_normal_map, vt));
