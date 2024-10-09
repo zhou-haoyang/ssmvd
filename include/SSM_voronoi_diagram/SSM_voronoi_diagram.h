@@ -1222,8 +1222,7 @@ class SSM_voronoi_diagram {
 
             auto d_02 = construct_vector(bi_line_min);
             Line_2 l0 = construct_line(*(tr.k0.edge())), l1 = construct_line(*(tr.k1.edge()));
-            if (is_negative(
-                    scalar_product(d_02, orthogonal_vector(l1) / abs(cc(l1)) - orthogonal_vector(l0) / abs(cc(l0))))) {
+            if (is_positive(scalar_product(d_02, orthogonal_vector(l1) / cc(l1) - orthogonal_vector(l0) / cc(l0)))) {
                 d_02 = opposite_vector(d_02);
             }
             auto bisector_02 = construct_parametric_line(p, d_02);
@@ -1231,8 +1230,7 @@ class SSM_voronoi_diagram {
 
             auto bisector_line_12 = get_bisector(tr.k1, k2_min);
             auto d_12 = construct_vector(bisector_line_12);
-            if (is_negative(
-                    scalar_product(d_12, orthogonal_vector(l0) / abs(cc(l0)) - orthogonal_vector(l1) / abs(cc(l1))))) {
+            if (is_positive(scalar_product(d_12, orthogonal_vector(l0) / cc(l0) - orthogonal_vector(l1) / cc(l1)))) {
                 d_12 = opposite_vector(d_12);
             }
             auto bisector_12 = construct_parametric_line(p, d_12);
