@@ -10,8 +10,8 @@ target_include_directories(ssm INTERFACE include)
 include(FetchContent)
 
 option(SSM_INCLUDE_CGAL "Include CGAL" OFF)
-option(SSM_BUILD_APP "Build the sample GUI" ON)
-option(SSM_BUILD_TESTS "Build tests" ON)
+option(SSM_BUILD_APP "Build the sample GUI" OFF)
+option(SSM_BUILD_TESTS "Build tests when building different projects" OFF)
 option(SSM_BUILD_EXAMPLES "Build examples" ON)
 
 set(CGAL_FIND_COMPONENTS Core)
