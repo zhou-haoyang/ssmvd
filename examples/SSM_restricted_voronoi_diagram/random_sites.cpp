@@ -63,9 +63,25 @@ struct Graphics_scene_options_sites
 
 struct Graphics_scene_options_vd : public CGAL::Graphics_scene_options<Voronoi_diagram, vd_vertex_descriptor,
                                                                        vd_edge_descriptor, vd_face_descriptor> {
-    const Voronoi_diagram_data& voronoi;
-    Graphics_scene_options_vd(const Voronoi_diagram_data& voronoi) : voronoi(voronoi) {
+    Voronoi_diagram_data& voronoi;
+    std::vector<CGAL::Color> _component_colors;
+    Voronoi_diagram_data::Face_component_map _component_map;
+
+    Graphics_scene_options_vd(Voronoi_diagram_data& voronoi) : voronoi(voronoi) {
         //  disable_faces();
+        auto [num_component, component_map] = voronoi.trace_components();
+        _component_colors.resize(num_component);
+        CGAL::Random random;
+        for (std::size_t i = 0; i < num_component; ++i) {
+            _component_colors[i] = CGAL::get_random_color(random);
+        }
+        _component_map = std::move(component_map);
+    }
+
+    bool colored_face(const Voronoi_diagram&, vd_face_descriptor fd) const { return true; }
+
+    CGAL::IO::Color face_color(const Voronoi_diagram&, vd_face_descriptor fd) const {
+        return _component_colors[get(_component_map, fd)];
     }
 
     bool colored_vertex(const Voronoi_diagram&, vd_vertex_descriptor) const { return true; }

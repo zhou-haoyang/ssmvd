@@ -263,6 +263,8 @@ class SSM_restricted_voronoi_diagram {
         using Vertex_normal_map = typename boost::property_map<Voronoi_diagram_graph, Vertex_normal_property>::type;
         using Edge_info_property = CGAL::dynamic_edge_property_t<Edge_info>;
         using Edge_info_map = typename boost::property_map<Voronoi_diagram_graph, Edge_info_property>::type;
+        using Face_component_property = CGAL::dynamic_face_property_t<std::size_t>;
+        using Face_component_map = typename boost::property_map<Voronoi_diagram_graph, Face_component_property>::type;
 
         Voronoi_diagram_graph graph;
         Voronoi_diagram_vertex_point_pmap vpm;
@@ -391,6 +393,58 @@ class SSM_restricted_voronoi_diagram {
             set_face(hd10, fd10, graph);
             put(edge_info_map, ed, std::move(info));
             return hd01;
+        }
+
+        template <class ComponentMap>
+        typename boost::property_traits<ComponentMap>::value_type trace_components(ComponentMap c) const {
+            using comp_t = typename boost::property_traits<ComponentMap>::value_type;
+            const comp_t UNVISITED = std::numeric_limits<comp_t>::max();
+
+            // Initialize all faces to UNVISITED
+            for (auto fd : faces(graph)) {
+                put(c, fd, UNVISITED);
+            }
+
+            comp_t num_components = 0;
+            std::deque<vd_face_descriptor> queue;
+
+            for (auto fd : faces(graph)) {
+                if (get(c, fd) != UNVISITED) continue;
+
+                // Start a new component
+                queue.clear();
+                queue.push_back(fd);
+                put(c, fd, num_components);
+
+                // Flood-fill all neighboring faces within the same component
+                while (!queue.empty()) {
+                    auto cur = queue.front();
+                    queue.pop_front();
+
+                    for (auto hd : halfedges_around_face(halfedge(cur, graph), graph)) {
+                        // Floods only through non-bisector edges
+                        if (is_bisector_edge(edge(hd, graph))) continue;
+
+                        auto fd_next = face(opposite(hd, graph), graph);
+                        if (fd_next == vd_graph_traits::null_face()) continue;
+
+                        if (get(c, fd_next) == UNVISITED) {
+                            put(c, fd_next, num_components);
+                            queue.push_back(fd_next);
+                        }
+                    }
+                }
+
+                ++num_components;
+            }
+
+            return num_components;
+        }
+
+        auto trace_components() {
+            Face_component_map map{get(Face_component_property{}, graph)};
+            std::size_t num_components = trace_components(map);
+            return std::make_pair(num_components, map);
         }
     };
 
@@ -652,6 +706,8 @@ class SSM_restricted_voronoi_diagram {
     const_voronoi_diagram_ptr voronoi_diagram_ptr() const { return voronoi; }
 
     const Voronoi_diagram_data &voronoi_diagram() const { return *voronoi; }
+
+    Voronoi_diagram_data &voronoi_diagram() { return *voronoi; }
 
     bool read_sites(std::istream &is) {
         std::size_t n_metrics;
