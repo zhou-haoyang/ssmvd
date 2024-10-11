@@ -1,3 +1,4 @@
+#include <CGAL/IO/Color.h>
 #include <CGAL/Polygon_mesh_processing/measure.h>
 #include <CGAL/Surface_mesh.h>
 #include <CGAL/Simple_cartesian.h>
@@ -50,6 +51,7 @@ using vd_graph_traits = typename boost::graph_traits<Voronoi_diagram>;
 using vd_vertex_descriptor = typename vd_graph_traits::vertex_descriptor;
 using vd_edge_descriptor = typename vd_graph_traits::edge_descriptor;
 using vd_face_descriptor = typename vd_graph_traits::face_descriptor;
+using Voronoi_diagram_data = SSM_restricted_voronoi_diagram::Voronoi_diagram_data;
 
 struct Graphics_scene_options_sites
     : public CGAL::Graphics_scene_options<PS3, typename PS3::const_iterator, typename PS3::const_iterator,
@@ -60,15 +62,20 @@ struct Graphics_scene_options_sites
 
 struct Graphics_scene_options_vd : public CGAL::Graphics_scene_options<Voronoi_diagram, vd_vertex_descriptor,
                                                                        vd_edge_descriptor, vd_face_descriptor> {
-    Graphics_scene_options_vd() { disable_faces(); }
+    const Voronoi_diagram_data& voronoi;
+    Graphics_scene_options_vd(const Voronoi_diagram_data& voronoi) : voronoi(voronoi) {
+        //  disable_faces();
+    }
 
     bool colored_vertex(const Voronoi_diagram&, vd_vertex_descriptor) const { return true; }
     CGAL::IO::Color vertex_color(const Voronoi_diagram&, vd_vertex_descriptor) const {
         return CGAL::IO::Color(220, 0, 0);
     }
 
-    bool colored_edge(const Voronoi_diagram&, vd_edge_descriptor) const { return true; }
-    CGAL::IO::Color edge_color(const Voronoi_diagram&, vd_edge_descriptor) const { return CGAL::IO::Color(220, 0, 0); }
+    bool colored_edge(const Voronoi_diagram&, vd_edge_descriptor ed) const { return true; }
+    CGAL::IO::Color edge_color(const Voronoi_diagram&, vd_edge_descriptor ed) const {
+        return get(voronoi.edge_bisector_map, ed) ? CGAL::IO::red() : CGAL::IO::black();
+    }
 };
 
 int main(int argc, char* argv[]) {
@@ -102,9 +109,10 @@ int main(int argc, char* argv[]) {
     }
 
     CGAL::Graphics_scene scene;
-    CGAL::add_to_graphics_scene(sm, scene);
+    // CGAL::add_to_graphics_scene(sm, scene);
     CGAL::add_to_graphics_scene(ps_sites, scene, Graphics_scene_options_sites());
-    CGAL::add_to_graphics_scene(ssm_vd.voronoi_diagram().graph, scene, Graphics_scene_options_vd());
+    CGAL::add_to_graphics_scene(ssm_vd.voronoi_diagram().graph, scene,
+                                Graphics_scene_options_vd(ssm_vd.voronoi_diagram()));
 
     CGAL::draw_graphics_scene(scene);
 
