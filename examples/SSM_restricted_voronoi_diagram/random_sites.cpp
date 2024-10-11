@@ -23,6 +23,7 @@
 #include <CGAL/draw_point_set_3.h>
 
 #include <iostream>
+#include <variant>
 
 namespace RVD = CGAL::SSM_restricted_voronoi_diagram;
 
@@ -73,8 +74,8 @@ struct Graphics_scene_options_vd : public CGAL::Graphics_scene_options<Voronoi_d
     }
 
     bool colored_edge(const Voronoi_diagram&, vd_edge_descriptor ed) const { return true; }
-    CGAL::IO::Color edge_color(const Voronoi_diagram&, vd_edge_descriptor ed) const {
-        return get(voronoi.edge_bisector_map, ed) ? CGAL::IO::red() : CGAL::IO::black();
+    CGAL::IO::Color edge_color(const Voronoi_diagram& vd, vd_edge_descriptor ed) const {
+        return voronoi.is_bisector_edge(ed) ? CGAL::IO::red() : CGAL::IO::black();
     }
 };
 
