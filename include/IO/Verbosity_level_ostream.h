@@ -4,7 +4,7 @@
 #include <iostream>
 
 namespace CGAL::IO {
-class Verbosity_level_ostream : std::ostream {
+class Verbosity_level_ostream {
    public:
     Verbosity_level_ostream(std::ostream &os = std::clog, int output_level = 0, int level = 0)
         : _os(os), _level(level), _output_level(output_level) {}
