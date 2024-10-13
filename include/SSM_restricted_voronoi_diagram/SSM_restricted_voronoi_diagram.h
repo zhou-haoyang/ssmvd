@@ -878,7 +878,7 @@ class SSM_restricted_voronoi_diagram {
                 vd_vertex_descriptor v_vd;
 
                 {
-                    std::lock_guard lock(mutex);
+                    std::lock_guard lock(vd_mutex);
 
                     if (auto vd_it = b_vert_map.find(bvid); vd_it != b_vert_map.cend()) {
                         v_vd = vd_it->second;
@@ -892,7 +892,7 @@ class SSM_restricted_voronoi_diagram {
                      << pt_start << std::endl;
 
                 if (add_border_edges && prev_vd != vd_graph_traits::null_vertex()) {
-                    std::lock_guard lock(mutex);
+                    std::lock_guard lock(vd_mutex);
                     voronoi->connect(prev_vd, v_vd, fd0, fd1, Boundary_edge_info{bh});
                 }
                 prev_vd = v_vd;
@@ -903,7 +903,7 @@ class SSM_restricted_voronoi_diagram {
                     auto bisect_line =
                         construct_parametric_line(pt_start, orient == POSITIVE ? bisect_dir : -bisect_dir);
 
-                    std::lock_guard lock(mutex);
+                    std::lock_guard lock(i_trace_mutex);
                     i_traces.push_back({
                         bisect_line,
                         bi_plane_min,
@@ -924,7 +924,7 @@ class SSM_restricted_voronoi_diagram {
                     auto bisect_line =
                         construct_parametric_line(pt_start, orient == POSITIVE ? bisect_dir : -bisect_dir);
 
-                    std::lock_guard lock(mutex);
+                    std::lock_guard lock(i_trace_mutex);
                     i_traces.push_back({
                         bisect_line,
                         bi_plane_min,
@@ -955,7 +955,7 @@ class SSM_restricted_voronoi_diagram {
                 // Otherwise switch to the next cone
                 auto isect = *isect_iter;
                 if (add_cone_vertices) {
-                    std::lock_guard lock(mutex);
+                    std::lock_guard lock(vd_mutex);
                     auto v_vd = voronoi->add_vertex(b_line(isect.second.t_min), Boundary_cone_info{bh, k0}, b_normal);
                     if (add_border_edges && prev_vd != vd_graph_traits::null_vertex()) {
                         voronoi->connect(prev_vd, v_vd, fd0, fd1, Boundary_edge_info{bh});
@@ -1060,9 +1060,10 @@ class SSM_restricted_voronoi_diagram {
         auto edge_visited = get(edge_bool_t{}, mesh);
 
         std::function<void(mesh_halfedge_descriptor, Cone_descriptor)> trace;
+        std::mutex edge_visited_mutex;
         trace = [&](mesh_halfedge_descriptor hd, Cone_descriptor k0) {
             {
-                std::lock_guard lock(mutex);
+                std::lock_guard lock(edge_visited_mutex);
                 if (get(edge_visited, edge(hd, mesh))) return;
                 put(edge_visited, edge(hd, mesh), true);
             }
@@ -1081,7 +1082,7 @@ class SSM_restricted_voronoi_diagram {
                                             add_cone_vertices, fd01, fd10);
 
             if (add_boundary_edges && add_mesh_vertices) {
-                std::lock_guard lock(mutex);
+                std::lock_guard lock(vd_mutex);
                 voronoi->connect(v_vd, get(vd_map, target(hd, mesh)), fd01, fd10, Boundary_edge_info{hd});
             }
 
@@ -1173,7 +1174,7 @@ class SSM_restricted_voronoi_diagram {
     std::shared_ptr<Voronoi_diagram_data> voronoi;
     vd_face_descriptor dummy_face;
 
-    std::mutex mutex;
+    std::mutex vd_mutex, i_trace_mutex;
     std::deque<Internal_trace> i_traces;
     std::unordered_map<Internal_vertex_id, vd_vertex_descriptor, Internal_vertex_id_hash> vert_map;
 
@@ -1381,7 +1382,7 @@ class SSM_restricted_voronoi_diagram {
     void process_i_trace(const Internal_trace &tr) {
         // Check if the bisector has already been traced (from another direction)
         {
-            std::lock_guard lock(mutex);
+            std::lock_guard lock(vd_mutex);
             auto v_hd = halfedge(tr.v_vd, voronoi->graph);
             auto range = processed_b_verts.equal_range(tr.v_vd);
             for (auto it = range.first; it != range.second; ++it) {
@@ -1478,7 +1479,7 @@ class SSM_restricted_voronoi_diagram {
             Point_3 pt_start;
             vd_vertex_descriptor v_vd;
             {
-                std::lock_guard lock(mutex);
+                std::lock_guard lock(vd_mutex);
 
                 if (auto vd_it = vert_map.find(vid); vd_it != vert_map.cend()) {
                     voronoi->connect(tr.v_vd, vd_it->second, dummy_face, dummy_face, Bisector_edge_info{});
@@ -1553,7 +1554,7 @@ class SSM_restricted_voronoi_diagram {
             Point_3 p;
             vd_vertex_descriptor v_vd;
             {
-                std::lock_guard lock(mutex);
+                std::lock_guard lock(vd_mutex);
 
                 if (auto vd_it = vert_map.find(vid); vd_it != vert_map.cend()) {
                     voronoi->connect(tr.v_vd, vd_it->second, dummy_face, dummy_face, Bisector_edge_info{});
@@ -1585,7 +1586,7 @@ class SSM_restricted_voronoi_diagram {
             // The bisector leaves the face on mesh
             Boundary_vertex_id bvid(cone_index(tr.k0), cone_index(tr.k1),
                                     get(edge_index_map, CGAL::edge(edge_hd, mesh)));
-            std::lock_guard lock(mutex);
+            std::lock_guard lock(vd_mutex);
             auto vd_it = b_vert_map.find(bvid);
             CGAL_assertion_msg(vd_it != b_vert_map.cend(), "Bisector leaves the face from an unknown vertex");
             voronoi->connect(tr.v_vd, vd_it->second, dummy_face, dummy_face, Bisector_edge_info{});
