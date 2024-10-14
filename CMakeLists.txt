@@ -34,6 +34,15 @@ else()
   find_package(CGAL 6.0 REQUIRED COMPONENTS ${CGAL_FIND_COMPONENTS})
 endif()
 
+FetchContent_Declare(
+  thread_pool
+  GIT_REPOSITORY https://github.com/bshoshany/thread-pool.git
+  GIT_TAG v4.1.0
+)
+
+FetchContent_MakeAvailable(thread_pool)
+target_include_directories(ssm INTERFACE ${thread_pool_SOURCE_DIR}/include)
+
 target_link_libraries(ssm INTERFACE CGAL::CGAL)
 
 if(SSM_BUILD_APP)
