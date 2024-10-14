@@ -799,7 +799,6 @@ class SSM_restricted_voronoi_diagram {
 
         vout << IO::level(1) << SOURCE_LOC << ": tracing boundary " << bh << " with cone " << cone_index(k0)
              << std::endl;
-        b_trace_timer.start();
 
         auto b_line = mesh_edge_segment(bh);
         FT t_min = 0, t_max = 1;
@@ -968,7 +967,6 @@ class SSM_restricted_voronoi_diagram {
                 t_min = isect.second.t_min;
             }
         }
-        b_trace_timer.stop();
         vout << IO::level(1) << SOURCE_LOC << ": boundary trace leaves from cone " << cone_index(k0) << std::endl;
         return std::make_pair(k0, prev_vd);
     }
@@ -1038,6 +1036,8 @@ class SSM_restricted_voronoi_diagram {
 
     void trace_all_boundaries(mesh_vertex_descriptor vd, bool add_mesh_vertices = true, bool add_boundary_edges = true,
                               bool add_cone_vertices = false) {
+        b_trace_timer.start();
+
         using vd_vertex_t = CGAL::dynamic_vertex_property_t<vd_vertex_descriptor>;
         using vd_vertex_map = typename boost::property_map<Surface_mesh, vd_vertex_t>::type;
         auto vd_map = get(vd_vertex_t{}, mesh);
@@ -1098,6 +1098,8 @@ class SSM_restricted_voronoi_diagram {
 
         // wait for all tasks to finish
         pool.wait();
+
+        b_trace_timer.stop();
     }
 
     void trace_all_boundaries(bool add_mesh_vertices = true, bool add_boundary_edges = true,
@@ -1130,7 +1132,10 @@ class SSM_restricted_voronoi_diagram {
         auto tr = std::move(i_traces.back());
         i_traces.pop_back();
         i_trace_timer.start();
-        process_i_trace(tr);
+
+        pool.detach_task([=, this]() { process_i_trace(tr); });
+        pool.wait();
+
         i_trace_timer.stop();
         return true;
     }
@@ -1139,10 +1144,12 @@ class SSM_restricted_voronoi_diagram {
         reset();
         trace_all_boundaries(add_mesh_vertices, add_boundary_edges, add_cone_vertices);
 
+        i_trace_timer.start();
         for (auto &trace : i_traces) {
             pool.detach_task([=, this]() { process_i_trace(trace); });
         }
         pool.wait();
+        i_trace_timer.stop();
 
         trace_faces();
         CGAL_postcondition(is_valid_face_graph(voronoi->graph, verbosity() > 0));
@@ -1186,10 +1193,11 @@ class SSM_restricted_voronoi_diagram {
     inline CGAL_STATIC_THREAD_LOCAL_VARIABLE_0(Segment_cone_intersections, isects_cache);
     inline CGAL_STATIC_THREAD_LOCAL_VARIABLE_0(std::vector<Segment_cone_intersections>, isects_vec_cache);
 
-    inline CGAL_STATIC_THREAD_LOCAL_VARIABLE_0(Real_timer, b_trace_timer);
-    inline CGAL_STATIC_THREAD_LOCAL_VARIABLE_0(Real_timer, i_trace_timer);
-
     inline CGAL_STATIC_THREAD_LOCAL_VARIABLE_0(IO::Verbosity_level_ostream, vout);
+
+    Real_timer b_trace_timer;
+    Real_timer i_trace_timer;
+
 #pragma endregion
 
 #pragma region PrivateMethods
