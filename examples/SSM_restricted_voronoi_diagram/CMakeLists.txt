@@ -1,2 +1,3 @@
 package_add_example(random_sites random_sites.cpp)
 package_add_example(simple_viewer simple_viewer.cpp)
+package_add_example(profiling profiling.cpp)

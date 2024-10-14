@@ -652,8 +652,11 @@ class SSM_restricted_voronoi_diagram {
           pool(num_threads),
           traits(traits) {}
 
-    SSM_restricted_voronoi_diagram(const Surface_mesh &mesh)
-        : SSM_restricted_voronoi_diagram(mesh, get(vertex_point, mesh), get(face_index, mesh), get(edge_index, mesh)) {}
+    SSM_restricted_voronoi_diagram(const Surface_mesh &mesh,
+                                   std::size_t num_threads = std::thread::hardware_concurrency(),
+                                   Traits traits = Traits())
+        : SSM_restricted_voronoi_diagram(mesh, get(vertex_point, mesh), get(face_index, mesh), get(edge_index, mesh),
+                                         num_threads, traits) {}
 
     void add_site(const Point_3 &p, index_t metric_idx) { m_sites.push_back({p, metric_idx}); }
 
@@ -713,6 +716,10 @@ class SSM_restricted_voronoi_diagram {
     const Voronoi_diagram_data &voronoi_diagram() const { return *voronoi; }
 
     Voronoi_diagram_data &voronoi_diagram() { return *voronoi; }
+
+    const Real_timer &i_timer() const { return i_trace_timer; }
+
+    const Real_timer &b_timer() const { return b_trace_timer; }
 
     bool read_sites(std::istream &is) {
         std::size_t n_metrics;
