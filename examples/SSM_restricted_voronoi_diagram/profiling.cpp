@@ -17,14 +17,7 @@
 #include <SSM_restricted_voronoi_diagram/AABB_metric_traits.h>
 #include <SSM_restricted_voronoi_diagram.h>
 
-#include <CGAL/Point_set_3.h>
-#include <CGAL/Graphics_scene_options.h>
-#include <CGAL/Qt/Basic_viewer.h>
-#include <CGAL/draw_surface_mesh.h>
-#include <CGAL/draw_point_set_3.h>
-
 #include <iostream>
-#include <variant>
 
 namespace RVD = CGAL::SSM_restricted_voronoi_diagram;
 
@@ -47,54 +40,11 @@ typedef RVD::SSM_restricted_voronoi_diagram_traits<Kernel, Surface_mesh, Metric_
 typedef RVD::SSM_restricted_voronoi_diagram<Traits> SSM_restricted_voronoi_diagram;
 typedef SSM_restricted_voronoi_diagram::Voronoi_diagram_data Voronoi_diagram_data;
 
-using PS3 = typename CGAL::Point_set_3<Point_3>;
-
 using vd_graph_traits = typename boost::graph_traits<Voronoi_diagram>;
 using vd_vertex_descriptor = typename vd_graph_traits::vertex_descriptor;
 using vd_edge_descriptor = typename vd_graph_traits::edge_descriptor;
 using vd_face_descriptor = typename vd_graph_traits::face_descriptor;
 using Voronoi_diagram_data = SSM_restricted_voronoi_diagram::Voronoi_diagram_data;
-
-struct Graphics_scene_options_sites
-    : public CGAL::Graphics_scene_options<PS3, typename PS3::const_iterator, typename PS3::const_iterator,
-                                          typename PS3::const_iterator> {
-    bool colored_vertex(const PS3&, typename PS3::const_iterator) const { return true; }
-    CGAL::IO::Color vertex_color(const PS3&, typename PS3::const_iterator) const { return CGAL::IO::Color(0, 220, 0); }
-};
-
-struct Graphics_scene_options_vd : public CGAL::Graphics_scene_options<Voronoi_diagram, vd_vertex_descriptor,
-                                                                       vd_edge_descriptor, vd_face_descriptor> {
-    Voronoi_diagram_data& voronoi;
-    std::vector<CGAL::Color> _component_colors;
-    Voronoi_diagram_data::Face_component_map _component_map;
-
-    Graphics_scene_options_vd(Voronoi_diagram_data& voronoi) : voronoi(voronoi) {
-        //  disable_faces();
-        auto [num_component, component_map] = voronoi.trace_components();
-        _component_colors.resize(num_component);
-        CGAL::Random random;
-        for (std::size_t i = 0; i < num_component; ++i) {
-            _component_colors[i] = CGAL::get_random_color(random);
-        }
-        _component_map = std::move(component_map);
-    }
-
-    bool colored_face(const Voronoi_diagram&, vd_face_descriptor fd) const { return true; }
-
-    CGAL::IO::Color face_color(const Voronoi_diagram&, vd_face_descriptor fd) const {
-        return _component_colors[get(_component_map, fd)];
-    }
-
-    bool colored_vertex(const Voronoi_diagram&, vd_vertex_descriptor) const { return true; }
-    CGAL::IO::Color vertex_color(const Voronoi_diagram&, vd_vertex_descriptor) const {
-        return CGAL::IO::Color(220, 0, 0);
-    }
-
-    bool colored_edge(const Voronoi_diagram&, vd_edge_descriptor ed) const { return true; }
-    CGAL::IO::Color edge_color(const Voronoi_diagram& vd, vd_edge_descriptor ed) const {
-        return voronoi.is_bisector_edge(ed) ? CGAL::IO::red() : CGAL::IO::black();
-    }
-};
 
 int main(int argc, char* argv[]) {
     CGAL::get_default_random() = CGAL::Random(0);
