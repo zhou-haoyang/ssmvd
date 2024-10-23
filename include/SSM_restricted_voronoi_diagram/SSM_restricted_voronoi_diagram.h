@@ -452,6 +452,7 @@ class SSM_restricted_voronoi_diagram {
     };
 
     using const_voronoi_diagram_ptr = std::shared_ptr<const Voronoi_diagram_data>;
+    using Voronoi_diagram_ptr = std::shared_ptr<Voronoi_diagram_data>;
 
     struct Internal_trace {
         Pline_3 bisect_line;
@@ -712,6 +713,8 @@ class SSM_restricted_voronoi_diagram {
     auto i_trace_cend() const { return i_traces.end(); }
 
     const_voronoi_diagram_ptr voronoi_diagram_ptr() const { return voronoi; }
+
+    Voronoi_diagram_ptr voronoi_diagram_ptr() { return voronoi; }
 
     const Voronoi_diagram_data &voronoi_diagram() const { return *voronoi; }
 
