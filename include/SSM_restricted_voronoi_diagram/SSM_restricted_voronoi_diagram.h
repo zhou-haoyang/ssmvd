@@ -260,6 +260,10 @@ class SSM_restricted_voronoi_diagram {
 
     using Edge_info = std::variant<Bisector_edge_info, Boundary_edge_info>;
 
+    struct Halfedge_info {
+        Cone_descriptor k;
+    };
+
     struct Voronoi_diagram_data {
         using Vertex_info_property = CGAL::dynamic_vertex_property_t<Vertex_info>;
         using Vertex_info_map = typename boost::property_map<Voronoi_diagram_graph, Vertex_info_property>::type;
@@ -267,6 +271,8 @@ class SSM_restricted_voronoi_diagram {
         using Vertex_normal_map = typename boost::property_map<Voronoi_diagram_graph, Vertex_normal_property>::type;
         using Edge_info_property = CGAL::dynamic_edge_property_t<Edge_info>;
         using Edge_info_map = typename boost::property_map<Voronoi_diagram_graph, Edge_info_property>::type;
+        using Halfedge_info_property = CGAL::dynamic_halfedge_property_t<Halfedge_info>;
+        using Halfedge_info_map = typename boost::property_map<Voronoi_diagram_graph, Halfedge_info_property>::type;
         using Face_component_property = CGAL::dynamic_face_property_t<std::size_t>;
         using Face_component_map = typename boost::property_map<Voronoi_diagram_graph, Face_component_property>::type;
 
@@ -276,13 +282,15 @@ class SSM_restricted_voronoi_diagram {
         Vertex_info_map vertex_info_map;
         Vertex_normal_map vertex_normal_map;
         Edge_info_map edge_info_map;
+        Halfedge_info_map halfedge_info_map;
 
         Voronoi_diagram_data()
             : vpm(get(vertex_point, graph)),
               vertex_index_map(get(vertex_index, graph)),
               vertex_info_map(get(Vertex_info_property{}, graph)),
               vertex_normal_map(get(Vertex_normal_property{}, graph)),
-              edge_info_map(get(Edge_info_property{}, graph)) {}
+              edge_info_map(get(Edge_info_property{}, graph)),
+              halfedge_info_map(get(Halfedge_info_property{}, graph)) {}
 
         /**
          * @brief The copy constructor is deleted to avoid the property map ownership issue.
@@ -375,7 +383,8 @@ class SSM_restricted_voronoi_diagram {
         }
 
         vd_halfedge_descriptor connect(vd_vertex_descriptor v0, vd_vertex_descriptor v1, vd_face_descriptor fd01,
-                                       vd_face_descriptor fd10, Edge_info info) {
+                                       vd_face_descriptor fd10, Edge_info info, Halfedge_info hinfo01,
+                                       Halfedge_info hinfo10) {
             if (halfedge(v1, graph) != vd_graph_traits::null_halfedge()) {
                 for (auto hd : halfedges_around_target(v1, graph)) {
                     if (source(hd, graph) == v0) return hd;
@@ -395,6 +404,8 @@ class SSM_restricted_voronoi_diagram {
             set_face(hd01, fd01, graph);
             set_face(hd10, fd10, graph);
             put(edge_info_map, ed, std::move(info));
+            put(halfedge_info_map, hd01, std::move(hinfo01));
+            put(halfedge_info_map, hd10, std::move(hinfo10));
             return hd01;
         }
 
