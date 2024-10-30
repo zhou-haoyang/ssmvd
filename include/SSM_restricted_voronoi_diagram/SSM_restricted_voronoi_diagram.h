@@ -463,6 +463,10 @@ class SSM_restricted_voronoi_diagram {
             }
             return true;
         }
+
+        index_t cell_site(vd_face_descriptor fd) const {
+            return get(halfedge_info_map, halfedge(fd, graph)).k.site_idx;
+        }
     };
 
     using const_voronoi_diagram_ptr = std::shared_ptr<const Voronoi_diagram_data>;
@@ -955,8 +959,8 @@ class SSM_restricted_voronoi_diagram {
                         b_plane_opposite,
                         bh_opposite,
                         bh_opposite,
-                        k0,
                         k1_min,
+                        k0,
                         {},
                         metric_graph_traits::null_halfedge(),
                         v_vd,
@@ -1574,8 +1578,8 @@ class SSM_restricted_voronoi_diagram {
                 tr.face_plane,
                 edge_hd,
                 mesh_graph_traits::null_halfedge(),
-                tr.k1,
                 k2_min,
+                tr.k1,
                 tr.k0,
                 metric_graph_traits::null_halfedge(),
                 v_vd,
@@ -1587,6 +1591,9 @@ class SSM_restricted_voronoi_diagram {
             auto k1_prev = cone_idx_next == 0 ? tr.k0 : tr.k1;
             auto [c1_prev, m1_prev] = site(k1_prev.site_idx);
             Cone_descriptor k1_next{k1_prev.site_idx, cone_isect->fd};
+            if (cone_idx_next == 0) {
+                std::swap(k0_next, k1_next);
+            }
 
             Internal_vertex_id vid(cone_index(k0_next), cone_index(k1_next), cone_index(k1_prev), face_id);
             Point_3 p;
