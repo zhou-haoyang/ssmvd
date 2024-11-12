@@ -262,6 +262,7 @@ class SSM_restricted_voronoi_diagram {
 
     struct Halfedge_info {
         Cone_descriptor k;
+        mesh_face_descriptor mesh_fd;
     };
 
     struct Voronoi_diagram_data {
@@ -453,12 +454,16 @@ class SSM_restricted_voronoi_diagram {
             return std::make_pair(num_components, map);
         }
 
-        bool check_halfedge_info() const {
+        bool check_halfedge_info(bool has_boundary_edges = true) const {
             for (auto fd : faces(graph)) {
                 auto cell = halfedge(fd, graph);
-                auto site = get(halfedge_info_map, cell).k.site_idx;
+                auto info = get(halfedge_info_map, cell);
+                auto site = info.k.site_idx;
+                auto mesh_fd = info.mesh_fd;
                 for (auto hd : halfedges_around_face(halfedge(fd, graph), graph)) {
-                    if (get(halfedge_info_map, hd).k.site_idx != site) return false;
+                    auto hd_info = get(halfedge_info_map, hd);
+                    if (info.k.site_idx != site) return false;
+                    if(has_boundary_edges && info.mesh_fd!= mesh_fd) return false;
                 }
             }
             return true;
@@ -920,8 +925,8 @@ class SSM_restricted_voronoi_diagram {
 
                 if (add_border_edges && prev_vd != vd_graph_traits::null_vertex()) {
                     std::lock_guard lock(vd_mutex);
-                    voronoi->connect(prev_vd, v_vd, fd0, fd1, Boundary_edge_info{bh}, Halfedge_info{k0},
-                                     Halfedge_info{k0});
+                    voronoi->connect(prev_vd, v_vd, fd0, fd1, Boundary_edge_info{bh}, Halfedge_info{k0, face(bh, mesh)},
+                                     Halfedge_info{k0, face(bh_opposite, mesh)});
                 }
                 prev_vd = v_vd;
 
@@ -986,8 +991,8 @@ class SSM_restricted_voronoi_diagram {
                     std::lock_guard lock(vd_mutex);
                     auto v_vd = voronoi->add_vertex(b_line(isect.second.t_min), Boundary_cone_info{bh, k0}, b_normal);
                     if (add_border_edges && prev_vd != vd_graph_traits::null_vertex()) {
-                        voronoi->connect(prev_vd, v_vd, fd0, fd1, Boundary_edge_info{bh}, Halfedge_info{k0},
-                                         Halfedge_info{k0});
+                        voronoi->connect(prev_vd, v_vd, fd0, fd1, Boundary_edge_info{bh},
+                                         Halfedge_info{k0, face(bh, mesh)}, Halfedge_info{k0, face(bh_opposite, mesh)});
                     }
                     prev_vd = v_vd;
                 }
@@ -1114,7 +1119,7 @@ class SSM_restricted_voronoi_diagram {
             if (add_boundary_edges && add_mesh_vertices) {
                 std::lock_guard lock(vd_mutex);
                 voronoi->connect(v_vd, get(vd_map, target(hd, mesh)), fd01, fd10, Boundary_edge_info{hd},
-                                 Halfedge_info{k}, Halfedge_info{k});
+                                 Halfedge_info{k, face(hd, mesh)}, Halfedge_info{k, face(opposite(hd, mesh), mesh)});
             }
 
             for (auto hd_inner : halfedges_around_source(target(hd, mesh), mesh)) {
@@ -1184,7 +1189,7 @@ class SSM_restricted_voronoi_diagram {
 
         trace_faces();
         CGAL_postcondition(is_valid_face_graph(voronoi->graph, verbosity() > 0));
-        CGAL_postcondition(voronoi->check_halfedge_info());
+        CGAL_postcondition(voronoi->check_halfedge_info(add_boundary_edges));
 
         vout << IO::level(0) << "profiling: boundary trace: count = " << b_trace_timer.intervals()
              << ", time = " << b_trace_timer.time() << "s, speed = " << b_trace_timer.time() / b_trace_timer.intervals()
@@ -1512,7 +1517,8 @@ class SSM_restricted_voronoi_diagram {
             }
         }
 
-        auto face_id = get(face_index_map, face(tr.face_hd, mesh));
+        auto mesh_fd = face(tr.face_hd, mesh);
+        auto face_id = get(face_index_map, mesh_fd);
         if (dist_min < INF) {
             // Found a 3-site bisector
             Internal_vertex_id vid(cone_index(tr.k0), cone_index(tr.k1), cone_index(k2_min), face_id);
@@ -1523,7 +1529,7 @@ class SSM_restricted_voronoi_diagram {
 
                 if (auto vd_it = vert_map.find(vid); vd_it != vert_map.cend()) {
                     voronoi->connect(tr.v_vd, vd_it->second, dummy_face, dummy_face, Bisector_edge_info{},
-                                     Halfedge_info{tr.k0}, Halfedge_info{tr.k1});
+                                     Halfedge_info{tr.k0, mesh_fd}, Halfedge_info{tr.k1, mesh_fd});
                     return;
                 }
 
@@ -1531,8 +1537,8 @@ class SSM_restricted_voronoi_diagram {
 
                 v_vd = voronoi->add_vertex(pt_start, Three_site_bisector_info{tr.face_hd, tr.k0, tr.k1, k2_min},
                                            tr.face_plane.orthogonal_vector());
-                voronoi->connect(tr.v_vd, v_vd, dummy_face, dummy_face, Bisector_edge_info{}, Halfedge_info{tr.k0},
-                                 Halfedge_info{tr.k1});
+                voronoi->connect(tr.v_vd, v_vd, dummy_face, dummy_face, Bisector_edge_info{},
+                                 Halfedge_info{tr.k0, mesh_fd}, Halfedge_info{tr.k1, mesh_fd});
                 vert_map[vid] = v_vd;
             }
 
@@ -1603,7 +1609,7 @@ class SSM_restricted_voronoi_diagram {
 
                 if (auto vd_it = vert_map.find(vid); vd_it != vert_map.cend()) {
                     voronoi->connect(tr.v_vd, vd_it->second, dummy_face, dummy_face, Bisector_edge_info{},
-                                     Halfedge_info{tr.k0}, Halfedge_info{tr.k1});
+                                     Halfedge_info{tr.k0, mesh_fd}, Halfedge_info{tr.k1, mesh_fd});
                     return;
                 }
 
@@ -1611,8 +1617,8 @@ class SSM_restricted_voronoi_diagram {
                 v_vd = voronoi->add_vertex(
                     p, Two_site_bisector_info{tr.face_hd, k0_next, k1_next.site_idx, cone_isect->hd},
                     tr.face_plane.orthogonal_vector());
-                voronoi->connect(tr.v_vd, v_vd, dummy_face, dummy_face, Bisector_edge_info{}, Halfedge_info{tr.k0},
-                                 Halfedge_info{tr.k1});
+                voronoi->connect(tr.v_vd, v_vd, dummy_face, dummy_face, Bisector_edge_info{},
+                                 Halfedge_info{tr.k0, mesh_fd}, Halfedge_info{tr.k1, mesh_fd});
                 vert_map[vid] = v_vd;
             }
 
@@ -1636,8 +1642,8 @@ class SSM_restricted_voronoi_diagram {
             std::lock_guard lock(vd_mutex);
             auto vd_it = b_vert_map.find(bvid);
             CGAL_assertion_msg(vd_it != b_vert_map.cend(), "Bisector leaves the face from an unknown vertex");
-            voronoi->connect(tr.v_vd, vd_it->second, dummy_face, dummy_face, Bisector_edge_info{}, Halfedge_info{tr.k0},
-                             Halfedge_info{tr.k1});
+            voronoi->connect(tr.v_vd, vd_it->second, dummy_face, dummy_face, Bisector_edge_info{},
+                             Halfedge_info{tr.k0, mesh_fd}, Halfedge_info{tr.k1, mesh_fd});
             processed_b_verts.emplace(vd_it->second, edge_hd);
         }
     }
