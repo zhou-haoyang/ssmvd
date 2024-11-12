@@ -108,9 +108,11 @@ class Parametric_line_traits_3 {
                 // not coplanar
                 return std::nullopt;
             }
-            FT t0 = tn0.x() / n.x();
+            FT t0 = (tn0.x() + tn0.y() + tn0.z()) / (n.x() + n.y() + n.z());
+            // FT t0 = tn0.x() / n.x();
             auto tn1 = cross_product((p1 - p0), d0);
-            FT t1 = tn1.x() / n.x();
+            FT t1 = (tn1.x() + tn1.y() + tn1.z()) / (n.x() + n.y() + n.z());
+            // FT t1 = tn1.x() / n.x();
 
             return std::make_pair(t0, t1);
         }
