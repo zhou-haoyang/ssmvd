@@ -402,6 +402,31 @@ class SSM_restricted_voronoi_diagram {
             return hd01;
         }
 
+        void flood_fill_faces(auto &map, const auto &default_value, const auto &seed_faces,
+                              bool flood_through_bisector = false, bool flood_through_boundary = true) {
+            std::queue<vd_face_descriptor> queue;
+
+            for (auto fd : seed_faces) {
+                assert(get(map, fd) != default_value);
+                queue.push(fd);
+            }
+
+            while (!queue.empty()) {
+                auto fd = queue.front();
+                queue.pop();
+                for (auto hd : CGAL::halfedges_around_face(halfedge(fd, graph), graph)) {
+                    if (!flood_through_bisector && is_bisector_edge(edge(hd, graph))) continue;
+                    if (!flood_through_boundary && is_boundary_edge(edge(hd, graph))) continue;
+
+                    auto nfd = face(opposite(hd, graph), graph);
+                    if (get(map, nfd) == default_value) {
+                        put(map, nfd, get(map, fd));
+                        queue.push(nfd);
+                    }
+                }
+            }
+        }
+
         template <class ComponentMap>
         typename boost::property_traits<ComponentMap>::value_type trace_components(ComponentMap c) const {
             using comp_t = typename boost::property_traits<ComponentMap>::value_type;
@@ -417,31 +442,8 @@ class SSM_restricted_voronoi_diagram {
 
             for (auto fd : faces(graph)) {
                 if (get(c, fd) != UNVISITED) continue;
-
-                // Start a new component
-                queue.clear();
-                queue.push_back(fd);
                 put(c, fd, num_components);
-
-                // Flood-fill all neighboring faces within the same component
-                while (!queue.empty()) {
-                    auto cur = queue.front();
-                    queue.pop_front();
-
-                    for (auto hd : halfedges_around_face(halfedge(cur, graph), graph)) {
-                        // Floods only through non-bisector edges
-                        if (is_bisector_edge(edge(hd, graph))) continue;
-
-                        auto fd_next = face(opposite(hd, graph), graph);
-                        if (fd_next == vd_graph_traits::null_face()) continue;
-
-                        if (get(c, fd_next) == UNVISITED) {
-                            put(c, fd_next, num_components);
-                            queue.push_back(fd_next);
-                        }
-                    }
-                }
-
+                flood_fill_faces(c, UNVISITED, std::vector<vd_face_descriptor>{fd}, false, true);
                 ++num_components;
             }
 
