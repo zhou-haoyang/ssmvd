@@ -120,6 +120,7 @@ class SSM_restricted_voronoi_diagram {
     struct Site {
         Point_3 point;
         index_t metric_idx;
+        bool enabled = true;
     };
 
     struct Cone_index {
@@ -799,11 +800,28 @@ class SSM_restricted_voronoi_diagram {
         return {c, m_metrics[c.metric_idx]};
     }
 
+    void disable_site(index_t idx) { m_sites[idx].enabled = false; }
+
+    void enable_site(index_t idx) { m_sites[idx].enabled = true; }
+
+    void disable_all_sites() {
+        for (auto &s : m_sites) {
+            s.enabled = false;
+        }
+    }
+
+    void enable_all_sites() {
+        for (auto &s : m_sites) {
+            s.enabled = true;
+        }
+    }
+
     T find_nearest_site(const Point_3 &p, Cone_descriptor &m_cone) const {
         T d_min = INF;
 
         for (index_t i = 0; i < m_sites.size(); ++i) {
             auto [c, m] = site(i);
+            if (!c.enabled) continue;
 
             auto res = metric_any_intersection(m.data, p - c.point);
             if (!res) continue;
@@ -875,6 +893,10 @@ class SSM_restricted_voronoi_diagram {
 
             for (index_t k1_site = 0; k1_site < m_sites.size(); ++k1_site) {
                 if (k1_site == k0.site_idx) {
+                    continue;
+                }
+
+                if (!m_sites[k1_site].enabled) {
                     continue;
                 }
 
@@ -1422,6 +1444,7 @@ class SSM_restricted_voronoi_diagram {
                                              std::vector<Segment_cone_intersections> &res) const {
         res.resize(m_sites.size());
         for (index_t site_idx = 0; site_idx < m_sites.size(); ++site_idx) {
+            if (!m_sites[site_idx].enabled) continue;
             find_segment_cone_intersections(site_idx, segment, tmin, tmax, res[site_idx]);
         }
     }
@@ -1488,6 +1511,10 @@ class SSM_restricted_voronoi_diagram {
 
         for (index_t k2_site = 0; k2_site < m_sites.size(); ++k2_site) {
             if (k2_site == tr.k0.site_idx || k2_site == tr.k1.site_idx) {
+                continue;
+            }
+
+            if (!m_sites[k2_site].enabled) {
                 continue;
             }
 
