@@ -303,9 +303,13 @@ class SSM_restricted_voronoi_diagram {
             return std::holds_alternative<Boundary_edge_info>(get(edge_info_map, ed));
         }
 
+        bool is_boundary_edge(vd_halfedge_descriptor hd) const { return is_boundary_edge(edge(hd, graph)); }
+
         bool is_bisector_edge(vd_edge_descriptor ed) const {
             return std::holds_alternative<Bisector_edge_info>(get(edge_info_map, ed));
         }
+
+        bool is_bisector_edge(vd_halfedge_descriptor hd) const { return is_bisector_edge(edge(hd, graph)); }
 
         vd_vertex_descriptor add_vertex(const Point_3 &p, const Vertex_info &info, const Vector_3 &n = {}) {
             auto vd = CGAL::add_vertex(graph);
@@ -1200,16 +1204,20 @@ class SSM_restricted_voronoi_diagram {
         return true;
     }
 
-    void build(bool add_mesh_vertices = true, bool add_boundary_edges = true, bool add_cone_vertices = false) {
-        reset();
-        trace_all_boundaries(add_mesh_vertices, add_boundary_edges, add_cone_vertices);
-
+    void process_i_traces() {
         i_trace_timer.start();
         for (auto &trace : i_traces) {
             pool.detach_task([=, this]() { process_i_trace(trace); });
         }
         pool.wait();
         i_trace_timer.stop();
+    }
+
+    void build(bool add_mesh_vertices = true, bool add_boundary_edges = true, bool add_cone_vertices = false) {
+        reset();
+        trace_all_boundaries(add_mesh_vertices, add_boundary_edges, add_cone_vertices);
+
+        process_i_traces();
 
         trace_faces();
         CGAL_postcondition(is_valid_face_graph(voronoi->graph, verbosity() > 0));
