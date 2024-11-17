@@ -863,14 +863,14 @@ class SSM_restricted_voronoi_diagram {
     auto trace_boundary(mesh_halfedge_descriptor bh, Cone_descriptor k0, vd_vertex_descriptor prev_vd,
                         bool same_side = true, bool opposite_side = true, bool add_border_edges = false,
                         bool add_cone_vertices = false, vd_face_descriptor fd0 = vd_graph_traits::null_face(),
-                        vd_face_descriptor fd1 = vd_graph_traits::null_face()) {
+                        vd_face_descriptor fd1 = vd_graph_traits::null_face(), FT t_min = 0, FT t_max = 1) {
         CGAL_precondition(k0.is_valid());
 
         vout << IO::level(1) << SOURCE_LOC << ": tracing boundary " << bh << " with cone " << cone_index(k0)
              << std::endl;
 
         auto b_line = mesh_edge_segment(bh);
-        FT t_min = 0, t_max = 1;
+        // FT t_min = 0, t_max = 1;
 
         auto bh_opposite = opposite(bh, mesh);
         if (is_border(bh, mesh)) {
