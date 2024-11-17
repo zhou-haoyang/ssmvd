@@ -407,6 +407,32 @@ class SSM_restricted_voronoi_diagram {
             return hd01;
         }
 
+        void remove_halfedge(vd_halfedge_descriptor hd) {
+            // Find the previous halfedge in the target vertex loop
+            auto hd_cur = hd;
+            for (;;) {
+                auto hd_next = opposite(next(hd_cur, graph), graph);
+                if (hd_next == hd) break;
+                hd_cur = hd_next;
+            }
+            if (hd_cur == hd) {
+                // hd is the only halfedge around the target vertex
+                remove_vertex(target(hd, graph), graph);
+            } else {
+                set_next(hd_cur, next(hd, graph), graph);
+            }
+        }
+
+        void remove_edge(vd_edge_descriptor ed) {
+            auto hd = halfedge(ed, graph);
+            remove_halfedge(hd);
+
+            auto ohd = opposite(hd, graph);
+            if (ohd != vd_graph_traits::null_halfedge()) remove_halfedge(opposite(hd, graph));
+
+            CGAL::remove_edge(ed, graph);
+        }
+
         void flood_fill_faces(auto &map, const auto &default_value, const auto &seed_faces,
                               bool flood_through_bisector = false, bool flood_through_boundary = true) {
             std::queue<vd_face_descriptor> queue;
