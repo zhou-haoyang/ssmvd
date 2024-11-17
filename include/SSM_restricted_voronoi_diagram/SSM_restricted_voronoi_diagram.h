@@ -820,6 +820,18 @@ class SSM_restricted_voronoi_diagram {
         }
     }
 
+    void disable_sites(auto it_begin, auto it_end) {
+        for (auto it = it_begin; it != it_end; ++it) {
+            disable_site(*it);
+        }
+    }
+
+    void enable_sites(auto it_begin, auto it_end) {
+        for (auto it = it_begin; it != it_end; ++it) {
+            enable_site(*it);
+        }
+    }
+
     T find_nearest_site(const Point_3 &p, Cone_descriptor &m_cone) const {
         T d_min = INF;
 
