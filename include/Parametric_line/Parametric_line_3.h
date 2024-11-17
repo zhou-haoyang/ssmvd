@@ -28,6 +28,8 @@ struct Parametric_line_3 {
 
     Parametric_line_3 opposite() const { return R().construct_opposite_parametric_line_3_object()(*this); }
 
+    FT parameter(const Point_3 &p) const { return R().compute_parameter_3_object()(*this, p); }
+
     Point_3 p() const { return m_p; }
 
     Vector_3 d() const { return m_d; }
@@ -118,6 +120,14 @@ class Parametric_line_traits_3 {
         }
     };
 
+    struct Compute_parameter_3 {
+        FT operator()(const Parametric_line_3 &l, const Point_3 &p) const {
+            // l.p() + t * l.d() = p
+            auto v = K().construct_vector_3_object()(l.p(), p);
+            return (v.x() + v.y() + v.z()) / (l.d().x() + l.d().y() + l.d().z());
+        }
+    };
+
     auto construct_parametric_line_3_object() const { return Construct_parametric_line_3(); }
 
     auto construct_opposite_parametric_line_3_object() const { return Construct_opposite_parametric_line_3(); }
@@ -129,6 +139,8 @@ class Parametric_line_traits_3 {
     auto construct_point_on_3_object() const { return Construct_point_on_3(); }
 
     auto intersect_3_object() const { return Intersect_3(); }
+
+    auto compute_parameter_3_object() const { return Compute_parameter_3(); }
 };
 }  // namespace CGAL
 
