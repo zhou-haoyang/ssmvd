@@ -1254,6 +1254,7 @@ class SSM_restricted_voronoi_diagram {
             pool.detach_task([=, this]() { process_i_trace(trace); });
         }
         pool.wait();
+        i_traces.clear();
         i_trace_timer.stop();
     }
 
