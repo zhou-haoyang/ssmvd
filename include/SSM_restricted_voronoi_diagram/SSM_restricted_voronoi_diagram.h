@@ -415,11 +415,14 @@ class SSM_restricted_voronoi_diagram {
                 if (hd_next == hd) break;
                 hd_cur = hd_next;
             }
+            auto vt = target(hd, graph);
             if (hd_cur == hd) {
                 // hd is the only halfedge around the target vertex
-                remove_vertex(target(hd, graph), graph);
+                // remove_vertex(target(hd, graph), graph);
+                set_halfedge(vt, vd_graph_traits::null_halfedge(), graph);
             } else {
                 set_next(hd_cur, next(hd, graph), graph);
+                if (halfedge(vt, graph) == hd) set_halfedge(vt, hd_cur, graph);
             }
         }
 
@@ -428,7 +431,10 @@ class SSM_restricted_voronoi_diagram {
             remove_halfedge(hd);
 
             auto ohd = opposite(hd, graph);
-            if (ohd != vd_graph_traits::null_halfedge()) remove_halfedge(opposite(hd, graph));
+            remove_halfedge(opposite(hd, graph));
+
+            // CGAL::remove_face(face(hd, graph), graph);
+            // CGAL::remove_face(face(ohd, graph), graph);
 
             CGAL::remove_edge(ed, graph);
         }
