@@ -1226,6 +1226,7 @@ class SSM_restricted_voronoi_diagram {
         vert_map.clear();
         b_vert_map.clear();
         processed_b_verts.clear();
+        bounding_vertices.clear();
 
         if (b_trace_timer.is_running()) b_trace_timer.stop();
         if (i_trace_timer.is_running()) i_trace_timer.stop();
@@ -1301,6 +1302,8 @@ class SSM_restricted_voronoi_diagram {
 
     std::unordered_map<Boundary_vertex_id, vd_vertex_descriptor, Boundary_vertex_id_hash> b_vert_map;
     std::unordered_multimap<vd_vertex_descriptor, mesh_halfedge_descriptor> processed_b_verts;
+
+    std::vector<std::pair<Point_3, vd_vertex_descriptor>> bounding_vertices;
 
     BS::thread_pool pool;
 
@@ -1537,6 +1540,19 @@ class SSM_restricted_voronoi_diagram {
             CGAL_assertion(has_edge_isect);
         }
 
+        // Clip the bisector ray with bounding vertices
+        vd_vertex_descriptor bounding_vd = vd_graph_traits::null_vertex();
+        {
+            for (auto [pt, vd] : bounding_vertices) {
+                if (vd == tr.v_vd || squared_distance(tr.bisect_line, pt) > 1e-6) continue;
+                // if (vd == tr.v_vd || !tr.bisect_line.has_on(pt)) continue;
+                auto t = tr.bisect_line.parameter(pt);
+                if (t < tmin || t > tmax) continue;
+                tmax = t;
+                bounding_vd = vd;
+            }
+        }
+
         // Check if the bisector leaves the cone k0 or k1
         std::optional<Cone_intersection> cone_isect = std::nullopt;
         int cone_idx_next = -1;
@@ -1717,6 +1733,10 @@ class SSM_restricted_voronoi_diagram {
                 k0_next,     k1_next,  k1_prev,       cone_isect->hd, v_vd,
             };
             pool.detach_task([=, this]() { process_i_trace(tr1); });
+        } else if (bounding_vd != vd_graph_traits::null_vertex()) {
+            voronoi->connect(tr.v_vd, bounding_vd, dummy_face, dummy_face, Bisector_edge_info{},
+                             Halfedge_info{tr.k0, mesh_fd}, Halfedge_info{tr.k1, mesh_fd});
+
         } else {
             // The bisector leaves the face on mesh
             Boundary_vertex_id bvid(cone_index(tr.k0), cone_index(tr.k1),

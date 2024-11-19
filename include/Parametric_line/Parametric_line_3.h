@@ -34,6 +34,12 @@ struct Parametric_line_3 {
 
     Vector_3 d() const { return m_d; }
 
+    bool has_on(const Point_3 &p) const { return R().has_on_3_object()(*this, p); }
+
+    friend FT squared_distance(const Parametric_line_3 &l, const Point_3 &p) {
+        return R().compute_squared_distance_3_object()(l, p);
+    }
+
    private:
     Point_3 m_p;
     Vector_3 m_d;
@@ -75,6 +81,10 @@ class Parametric_line_traits_3 {
     struct Construct_point_on_3 : public K::Construct_point_on_3 {
         using K::Construct_point_on_3::operator();
         Point_3 operator()(const Parametric_line_3 &l, FT t) const { return l.p() + t * l.d(); }
+    };
+
+    struct Construct_target_3 {
+        Point_3 operator()(const Parametric_line_3 &l) const { return l.p() + l.d(); }
     };
 
     struct Intersect_3 : public K::Intersect_3 {
@@ -128,6 +138,21 @@ class Parametric_line_traits_3 {
         }
     };
 
+    struct Compute_Squared_distance_3 {
+        FT operator()(const Parametric_line_3 &l, const Point_3 &p) const {
+            auto v = K().construct_vector_3_object()(l.p(), p);
+            auto dp = K().compute_scalar_product_3_object()(l.d(), v);
+            return v.squared_length() - dp * dp / l.d().squared_length();
+        }
+    };
+
+    struct Has_on_3 : public K::Has_on_3 {
+        using K::Has_on_3::operator();
+        bool operator()(const Parametric_line_3 &l, const Point_3 &p) const {
+            return K().collinear_3_object()(l.p(), l.p() + l.d(), p);
+        }
+    };
+
     auto construct_parametric_line_3_object() const { return Construct_parametric_line_3(); }
 
     auto construct_opposite_parametric_line_3_object() const { return Construct_opposite_parametric_line_3(); }
@@ -138,9 +163,15 @@ class Parametric_line_traits_3 {
 
     auto construct_point_on_3_object() const { return Construct_point_on_3(); }
 
+    auto construct_target_3_object() const { return Construct_target_3(); }
+
     auto intersect_3_object() const { return Intersect_3(); }
 
     auto compute_parameter_3_object() const { return Compute_parameter_3(); }
+
+    auto compute_squared_distance_3_object() const { return Compute_Squared_distance_3(); }
+
+    auto has_on_3_object() const { return Has_on_3(); }
 };
 }  // namespace CGAL
 
