@@ -426,15 +426,15 @@ class SSM_restricted_voronoi_diagram {
             }
         }
 
-        void remove_edge(vd_edge_descriptor ed) {
+        void disconnect(vd_edge_descriptor ed) {
             auto hd = halfedge(ed, graph);
             remove_halfedge(hd);
-
-            auto ohd = opposite(hd, graph);
             remove_halfedge(opposite(hd, graph));
+            // CGAL::remove_edge(ed, graph);
+        }
 
-            // CGAL::remove_face(face(hd, graph), graph);
-            // CGAL::remove_face(face(ohd, graph), graph);
+        void remove_edge(vd_edge_descriptor ed) {
+            disconnect(ed);
 
             CGAL::remove_edge(ed, graph);
         }
