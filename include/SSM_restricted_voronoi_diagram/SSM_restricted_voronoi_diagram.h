@@ -1242,7 +1242,7 @@ class SSM_restricted_voronoi_diagram {
         i_traces.pop_back();
         i_trace_timer.start();
 
-        pool.detach_task([=, this]() { process_i_trace(tr); });
+        pool.detach_task([=, this]() { process_i_trace(tr, false); });
         pool.wait();
 
         i_trace_timer.stop();
@@ -1505,7 +1505,7 @@ class SSM_restricted_voronoi_diagram {
         }
     }
 
-    void process_i_trace(const Internal_trace &tr) {
+    void process_i_trace(const Internal_trace &tr, bool immediate = true) {
         // Check if the bisector has already been traced (from another direction)
         {
             std::lock_guard lock(vd_mutex);
@@ -1664,7 +1664,11 @@ class SSM_restricted_voronoi_diagram {
                 metric_graph_traits::null_halfedge(),
                 v_vd,
             };
-            pool.detach_task([=, this]() { process_i_trace(tr02); });
+
+            if (immediate)
+                pool.detach_task([=, this]() { process_i_trace(tr02); });
+            else
+                i_traces.push_back(tr02);
 
             // Add branch bisector of site 1 and 2
             auto bisect_plane_12 = get_bisect_plane(tr.k1, k2_min);
@@ -1688,7 +1692,11 @@ class SSM_restricted_voronoi_diagram {
                 metric_graph_traits::null_halfedge(),
                 v_vd,
             };
-            pool.detach_task([=, this]() { process_i_trace(tr12); });
+
+            if (immediate)
+                pool.detach_task([=, this]() { process_i_trace(tr12); });
+            else
+                i_traces.push_back(tr12);
         } else if (cone_isect) {
             // The bisector ray intersects the cone
             auto k0_next = cone_idx_next == 0 ? tr.k1 : tr.k0;
@@ -1732,7 +1740,11 @@ class SSM_restricted_voronoi_diagram {
                 bisect_line, bi_plane, tr.face_plane, edge_hd,        mesh_graph_traits::null_halfedge(),
                 k0_next,     k1_next,  k1_prev,       cone_isect->hd, v_vd,
             };
-            pool.detach_task([=, this]() { process_i_trace(tr1); });
+
+            if (immediate)
+                pool.detach_task([=, this]() { process_i_trace(tr1); });
+            else
+                i_traces.push_back(tr1);
         } else if (bounding_vd != vd_graph_traits::null_vertex()) {
             voronoi->connect(tr.v_vd, bounding_vd, dummy_face, dummy_face, Bisector_edge_info{},
                              Halfedge_info{tr.k0, mesh_fd}, Halfedge_info{tr.k1, mesh_fd});
