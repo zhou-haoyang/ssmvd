@@ -1746,6 +1746,7 @@ class SSM_restricted_voronoi_diagram {
             else
                 i_traces.push_back(tr1);
         } else if (bounding_vd != vd_graph_traits::null_vertex()) {
+            std::lock_guard lock(vd_mutex);
             voronoi->connect(tr.v_vd, bounding_vd, dummy_face, dummy_face, Bisector_edge_info{},
                              Halfedge_info{tr.k0, mesh_fd}, Halfedge_info{tr.k1, mesh_fd});
 
