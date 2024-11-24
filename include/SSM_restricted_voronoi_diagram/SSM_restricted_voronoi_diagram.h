@@ -320,6 +320,12 @@ class SSM_restricted_voronoi_diagram {
             return vd;
         }
 
+        void print_halfedge_loop(vd_vertex_descriptor vd) const {
+            for (auto hd : halfedges_around_target(vd, graph)) {
+                std::cout << source(hd, graph) << " ";
+            }
+        }
+
         static Vector_3 normalized(const Vector_3 &v) {
             auto n = v.squared_length();
             CGAL_assertion(!is_zero(n));
