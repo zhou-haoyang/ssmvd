@@ -407,7 +407,14 @@ class SSM_restricted_voronoi_diagram {
             return hd01;
         }
 
-        void remove_halfedge(vd_halfedge_descriptor hd) {
+        /**
+         * @brief Remove halfedge `hd` from the halfedge loop around the target vertex `target(hd, graph)`.
+         * Return true if the target vertex is not orphaned after the removal.
+         * @param hd
+         * @return true
+         * @return false
+         */
+        bool remove_halfedge(vd_halfedge_descriptor hd) {
             // Find the previous halfedge in the target vertex loop
             auto hd_cur = hd;
             for (;;) {
@@ -418,24 +425,41 @@ class SSM_restricted_voronoi_diagram {
             auto vt = target(hd, graph);
             if (hd_cur == hd) {
                 // hd is the only halfedge around the target vertex
-                // remove_vertex(target(hd, graph), graph);
                 set_halfedge(vt, vd_graph_traits::null_halfedge(), graph);
+                return false;
+                // if (remove_orphaned_vertex)
+                //     remove_vertex(vt, graph);
+                // else
+                //     set_halfedge(vt, vd_graph_traits::null_halfedge(), graph);
             } else {
+                // Skip hd in the halfedge around target loop
                 set_next(hd_cur, next(hd, graph), graph);
                 if (halfedge(vt, graph) == hd) set_halfedge(vt, hd_cur, graph);
+                return true;
             }
         }
 
-        void disconnect(vd_edge_descriptor ed) {
-            auto hd = halfedge(ed, graph);
+        /**
+         * @brief Remove `halfedge(ed, graph)` and `opposite(halfedge(ed, graph), graph)` from the loop of halfedge
+         * around target. This does not remove the edge but isolate the edge from the graph.
+         * @param ed
+         */
+        void detach_edge(vd_edge_descriptor ed) {
+            auto hd = halfedge(ed, graph), ohd = opposite(hd, graph);
             remove_halfedge(hd);
-            remove_halfedge(opposite(hd, graph));
-            // CGAL::remove_edge(ed, graph);
+            remove_halfedge(ohd);
+            set_next(hd, ohd, graph);
+            set_next(ohd, hd, graph);
         }
 
+        /**
+         * @brief Detach the edge from the graph then remove the edge.
+         *
+         * @param ed
+         * @param remove_orphaned_vertex
+         */
         void remove_edge(vd_edge_descriptor ed) {
-            disconnect(ed);
-
+            detach_edge(ed);
             CGAL::remove_edge(ed, graph);
         }
 
