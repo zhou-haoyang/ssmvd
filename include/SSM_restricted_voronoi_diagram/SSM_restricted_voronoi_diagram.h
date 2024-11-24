@@ -263,6 +263,12 @@ class SSM_restricted_voronoi_diagram {
 
     struct Halfedge_info {
         Cone_descriptor k;
+
+        /**
+         * @brief The face of surface mesh containing the halfedge.
+         *
+         * If the halfedge is on the boundary, the face corresponds to the mesh boundary halfedge.
+         */
         mesh_face_descriptor mesh_fd;
     };
 
@@ -389,6 +395,9 @@ class SSM_restricted_voronoi_diagram {
         vd_halfedge_descriptor connect(vd_vertex_descriptor v0, vd_vertex_descriptor v1, vd_face_descriptor fd01,
                                        vd_face_descriptor fd10, Edge_info info, Halfedge_info hinfo01,
                                        Halfedge_info hinfo10) {
+            CGAL_precondition(v0 != v1);
+            CGAL_precondition(v0 != vd_graph_traits::null_vertex() && v1 != vd_graph_traits::null_vertex());
+
             if (halfedge(v1, graph) != vd_graph_traits::null_halfedge()) {
                 for (auto hd : halfedges_around_target(v1, graph)) {
                     if (source(hd, graph) == v0) return hd;
@@ -927,6 +936,7 @@ class SSM_restricted_voronoi_diagram {
                         bool add_cone_vertices = false, vd_face_descriptor fd0 = vd_graph_traits::null_face(),
                         vd_face_descriptor fd1 = vd_graph_traits::null_face(), FT t_min = 0, FT t_max = 1) {
         CGAL_precondition(k0.is_valid());
+        CGAL_precondition(t_max > t_min);
 
         vout << IO::level(1) << SOURCE_LOC << ": tracing boundary " << bh << " with cone " << cone_index(k0)
              << std::endl;
@@ -1492,6 +1502,8 @@ class SSM_restricted_voronoi_diagram {
      */
     void find_segment_cone_intersections(index_t site_idx, const Pline_3 &segment, FT tmin, FT tmax,
                                          Segment_cone_intersections &res) const {
+        CGAL_precondition(tmax > tmin);
+
         auto [c, m] = site(site_idx);
         auto pmin = construct_point_on(segment, tmin);
         auto pmax = construct_point_on(segment, tmax);
@@ -1574,7 +1586,7 @@ class SSM_restricted_voronoi_diagram {
         vd_vertex_descriptor bounding_vd = vd_graph_traits::null_vertex();
         {
             for (auto [pt, vd] : bounding_vertices) {
-                if (vd == tr.v_vd || squared_distance(tr.bisect_line, pt) > 1e-6) continue;
+                if (vd == tr.v_vd || squared_distance(tr.bisect_line, pt) > 1e-8) continue;
                 // if (vd == tr.v_vd || !tr.bisect_line.has_on(pt)) continue;
                 auto t = tr.bisect_line.parameter(pt);
                 if (t < tmin || t > tmax) continue;
