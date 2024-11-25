@@ -1319,19 +1319,20 @@ class SSM_restricted_voronoi_diagram {
         i_trace_timer.reset();
     }
 
-    bool step() {
+    std::optional<Internal_trace> step() {
         if (i_traces.empty()) {
-            return false;
+            return std::nullopt;
         }
         auto tr = std::move(i_traces.back());
         i_traces.pop_back();
         i_trace_timer.start();
 
-        pool.detach_task([=, this]() { process_i_trace(tr, false); });
-        pool.wait();
+        // pool.detach_task([=, this]() { process_i_trace(tr, false); });
+        // pool.wait();
+        process_i_trace(tr, false);
 
         i_trace_timer.stop();
-        return true;
+        return tr;
     }
 
     void process_i_traces() {
