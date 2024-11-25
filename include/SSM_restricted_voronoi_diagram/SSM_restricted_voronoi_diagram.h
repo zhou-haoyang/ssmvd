@@ -547,6 +547,51 @@ class SSM_restricted_voronoi_diagram {
             return true;
         }
 
+        template <class... Ts>
+        struct overloaded : Ts... {
+            using Ts::operator()...;
+        };
+
+        bool check_topology() const {
+            for (auto vd : vertices(graph)) {
+                std::visit(overloaded{
+                               [&](const Boundary_vertex_info &info) {
+                                   for (auto hd : halfedges_around_target(vd, graph)) {
+                                       CGAL_assertion(is_boundary_edge(hd));
+                                   }
+                               },
+                               [&](const Boundary_cone_info &info) {
+                                   CGAL_assertion(degree(vd, graph) == 2);
+                                   auto hd0 = halfedge(vd, graph), hd1 = next(hd0, graph);
+                                   CGAL_assertion(is_boundary_edge(hd0) && is_boundary_edge(hd1));
+                               },
+                               [&](const Boundary_bisector_info &info) {
+                                   CGAL_assertion(degree(vd, graph) == 4);
+                                   int n_boundary = 0, n_bisector = 0;
+                                   for (auto hd : halfedges_around_target(vd, graph)) {
+                                       if (is_bisector_edge(hd)) ++n_bisector;
+                                       if (is_boundary_edge(hd)) ++n_boundary;
+                                   }
+                                   CGAL_assertion(n_boundary == 2 && n_bisector == 2);
+                               },
+                               [&](const Two_site_bisector_info &info) {
+                                   CGAL_assertion(degree(vd, graph) == 2);
+                                   auto hd0 = halfedge(vd, graph), hd1 = next(hd0, graph);
+                                   CGAL_assertion(is_bisector_edge(hd0) && is_bisector_edge(hd1));
+                               },
+                               [&](const Three_site_bisector_info &info) {
+                                   CGAL_assertion(degree(vd, graph) == 3);
+
+                                   for (auto hd : halfedges_around_target(vd, graph)) {
+                                       CGAL_assertion(is_bisector_edge(hd));
+                                   }
+                               },
+                           },
+                           get(vertex_info_map, vd));
+                return true;
+            }
+        }
+
         index_t cell_site(vd_face_descriptor fd) const {
             return get(halfedge_info_map, halfedge(fd, graph)).k.site_idx;
         }
@@ -1308,6 +1353,7 @@ class SSM_restricted_voronoi_diagram {
         trace_faces();
         CGAL_postcondition(is_valid_face_graph(voronoi->graph, verbosity() > 0));
         CGAL_postcondition(voronoi->check_halfedge_info(add_boundary_edges));
+        CGAL_postcondition(voronoi->check_topology());
 
         vout << IO::level(0) << "profiling: boundary trace: count = " << b_trace_timer.intervals()
              << ", time = " << b_trace_timer.time() << "s, speed = " << b_trace_timer.time() / b_trace_timer.intervals()
