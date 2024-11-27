@@ -16,6 +16,8 @@
 #include <CGAL/Real_timer.h>
 #include <CGAL/Named_function_parameters.h>
 #include <CGAL/Polygon_mesh_processing/compute_normal.h>
+#include <CGAL/Projection_traits_3.h>
+#include <CGAL/Polygon_2_algorithms.h>
 
 #include <CGAL/boost/graph/graph_traits_HalfedgeDS_default.h>
 #include <CGAL/boost/graph/helpers.h>
@@ -58,6 +60,7 @@ class SSM_restricted_voronoi_diagram {
    public:
 #pragma region PublicTypes
 
+    using Kernel = typename Traits::Kernel;
     using T = typename Traits::T;
     using FT = typename Traits::FT;
     using Point_3 = typename Traits::Point_3;
@@ -90,6 +93,9 @@ class SSM_restricted_voronoi_diagram {
     using vd_edge_descriptor = typename vd_graph_traits::edge_descriptor;
     using vd_halfedge_descriptor = typename vd_graph_traits::halfedge_descriptor;
     using vd_face_descriptor = typename vd_graph_traits::face_descriptor;
+
+    using Face_component_property = CGAL::dynamic_face_property_t<index_t>;
+    using Face_component_map = typename boost::property_map<Voronoi_diagram_graph, Face_component_property>::type;
 
     using Mesh_vertex_point_pmap =
         typename Default::Get<MeshVertexPointPMap,
@@ -310,8 +316,6 @@ class SSM_restricted_voronoi_diagram {
         using Edge_info_map = typename boost::property_map<Voronoi_diagram_graph, Edge_info_property>::type;
         using Halfedge_info_property = CGAL::dynamic_halfedge_property_t<Halfedge_info>;
         using Halfedge_info_map = typename boost::property_map<Voronoi_diagram_graph, Halfedge_info_property>::type;
-        using Face_component_property = CGAL::dynamic_face_property_t<std::size_t>;
-        using Face_component_map = typename boost::property_map<Voronoi_diagram_graph, Face_component_property>::type;
 
         Voronoi_diagram_graph graph;
         Voronoi_diagram_vertex_point_pmap vpm;
@@ -561,6 +565,15 @@ class SSM_restricted_voronoi_diagram {
             return std::make_pair(num_components, map);
         }
 
+        auto face_bounded_side(vd_face_descriptor fd, const Point_3 &p) const {
+            auto n = PMP::compute_face_normal(fd, graph);
+            std::vector<Point_3> vertices;
+            for (auto vd : vertices_around_face(halfedge(fd, graph), graph)) {
+                vertices.push_back(get(vpm, vd));
+            }
+            return CGAL::bounded_side_2(vertices.begin(), vertices.end(), p, CGAL::Projection_traits_3<Kernel>(n));
+        }
+
         bool check_halfedge_info(bool has_boundary_edges = true) const {
             for (auto fd : faces(graph)) {
                 auto cell = halfedge(fd, graph);
@@ -570,7 +583,7 @@ class SSM_restricted_voronoi_diagram {
                 for (auto hd : halfedges_around_face(halfedge(fd, graph), graph)) {
                     auto hd_info = get(halfedge_info_map, hd);
                     if (info.k.site_idx != site) return false;
-                    if(has_boundary_edges && info.mesh_fd!= mesh_fd) return false;
+                    if (has_boundary_edges && info.mesh_fd != mesh_fd) return false;
                 }
             }
             return true;
@@ -623,6 +636,18 @@ class SSM_restricted_voronoi_diagram {
 
         index_t cell_site(vd_face_descriptor fd) const {
             return get(halfedge_info_map, halfedge(fd, graph)).k.site_idx;
+        }
+
+        void prune_orphan_vertices() {
+            std::vector<vd_vertex_descriptor> orphans;
+            for (auto vd : vertices(graph)) {
+                if (degree(vd, graph) == 0) {
+                    orphans.push_back(vd);
+                }
+            }
+            for (auto vd : orphans) {
+                CGAL::remove_vertex(vd, graph);
+            }
         }
     };
 
@@ -812,6 +837,14 @@ class SSM_restricted_voronoi_diagram {
         std::vector<metric_face_descriptor> fds;      // N
 
         mutable std::unordered_map<metric_face_descriptor, size_t> idx_map;
+    };
+
+    struct Disconnected_component {
+        std::unordered_set<vd_face_descriptor> faces;
+        std::unordered_set<index_t> neighbor_sites;
+        std::unordered_set<vd_halfedge_descriptor> trace_inward_edges;
+        std::unordered_set<vd_edge_descriptor> boundary_edges;
+        std::unordered_set<vd_edge_descriptor> bisector_edges;
     };
 #pragma endregion
 
@@ -1393,6 +1426,123 @@ class SSM_restricted_voronoi_diagram {
              << "s/trace" << std::endl;
     }
 
+#pragma region DisconnectedComponentRemoval
+    void trace_principal_components(const auto &seed_points, const auto &seed_mesh_faces, auto &component_map) {
+        std::unordered_multimap<mesh_face_descriptor, index_t> seed_face_map;
+        for (index_t c = 0; c < seed_mesh_faces.size(); ++c) {
+            seed_face_map.emplace(seed_mesh_faces[c], c);
+        }
+
+        std::vector<vd_face_descriptor> seed_faces;
+        auto &G = voronoi->graph;
+        for (auto fd : faces(G)) {
+            auto hd = halfedge(fd, G);
+            auto mesh_fd = get(voronoi->halfedge_info_map, hd).mesh_fd;
+            put(component_map, fd, -1);
+
+            auto range = seed_face_map.equal_range(mesh_fd);
+
+            for (auto it = range.first; it != range.second; ++it) {
+                auto p = seed_points[it->second];
+                // if (bounded_side_3(G, fd, m_sites[site].point, voronoi->vpm) != CGAL::ON_UNBOUNDED_SIDE) {
+                //     put(component_map, fd, site);
+                //     seed_faces.push_back(fd);
+                //     break;
+                // }
+
+                if (voronoi->face_bounded_side(fd, p) != CGAL::ON_UNBOUNDED_SIDE) {
+                    put(component_map, fd, it->second);
+                    seed_faces.push_back(fd);
+                    break;
+                }
+            }
+        }
+
+        voronoi->flood_fill_faces(component_map, -1, seed_faces);
+    }
+
+    Face_component_map trace_principal_components(const auto &seed_points, const auto &seed_mesh_faces) {
+        Face_component_map component_map{get(Face_component_property{}, voronoi->graph)};
+        trace_principal_components(seed_points, seed_mesh_faces, component_map);
+        return component_map;
+    }
+
+    void trace_principal_components(const auto &seed_mesh_faces, auto &component_map) {
+        std::vector<Point_3> seed_points;
+        for (auto &c : m_sites) {
+            seed_points.push_back(c.point);
+        }
+        trace_principal_components(seed_points, seed_mesh_faces, component_map);
+    }
+
+    Face_component_map trace_principal_components(const auto &seed_mesh_faces) {
+        Face_component_map component_map{get(Face_component_property{}, voronoi->graph)};
+        trace_principal_components(seed_mesh_faces, component_map);
+        return component_map;
+    }
+
+    void remove_all_disconnected_components(const auto &...args) {
+        auto cmap = get(Face_component_property{}, voronoi->graph);
+        for (;;) {
+            trace_principal_components(args..., cmap);
+            // Check if there is any disconnected component
+            bool has_disconnected = false;
+            for (auto fd : faces(voronoi->graph)) {
+                if (get(cmap, fd) < 0) {
+                    has_disconnected = true;
+                    break;
+                }
+            }
+            if (!has_disconnected) {
+                break;
+            }
+            remove_disconnected_components(cmap);
+        }
+    }
+
+    void remove_disconnected_components(const auto &cmap) {
+        scan_disconnected_components(cmap, m_disconnected_components_cache);
+
+        dummy_face = add_face(voronoi->graph);
+        for (auto &comp : m_disconnected_components_cache) {
+            add_traces(comp);
+            process_i_traces();
+        }
+
+        for (auto &comp : m_disconnected_components_cache) {
+            prune_bounding_vertices(comp);
+        }
+
+        retrace_faces();
+        voronoi->prune_orphan_vertices();
+
+        CGAL_postcondition(CGAL::is_valid_face_graph(voronoi->graph, verbosity() > 0));
+        CGAL_postcondition(voronoi->check_halfedge_info(true));
+    }
+
+    void retrace_faces() {
+        auto &G = voronoi->graph;
+        for (auto hd : halfedges(G)) {
+            if (face(hd, G) != vd_graph_traits::null_face()) {
+                CGAL::set_face(hd, dummy_face, G);
+            }
+        }
+
+        std::vector<vd_face_descriptor> faces_to_remove;
+        for (auto fd : faces(G)) {
+            if (fd != dummy_face) {
+                faces_to_remove.push_back(fd);
+            }
+        }
+
+        for (auto fd : faces_to_remove) {
+            CGAL::remove_face(fd, G);
+        }
+
+        trace_faces();
+    }
+#pragma endregion
+
     static int verbosity() { return vout.output_level(); }
 
     static void set_verbosity(int level) { vout.output_level(level); }
@@ -1419,6 +1569,8 @@ class SSM_restricted_voronoi_diagram {
     std::unordered_map<Boundary_vertex_id, vd_vertex_descriptor, Boundary_vertex_id_hash> b_vert_map;
     std::unordered_multimap<vd_vertex_descriptor, mesh_halfedge_descriptor> processed_b_verts;
 
+    /// Disconnected component removal
+    std::vector<Disconnected_component> m_disconnected_components_cache;
     std::unordered_multimap<Bisector_segment_id, vd_vertex_descriptor, Bisector_segment_id_hash> bounding_vertices;
 
     BS::thread_pool pool;
@@ -1885,6 +2037,212 @@ class SSM_restricted_voronoi_diagram {
             processed_b_verts.emplace(vd_it->second, edge_hd);
         }
     }
+
+    void _scan_disconnected_components(const auto &cmap, std::vector<Disconnected_component> &components,
+                                       const auto &faces) const {
+        std::unordered_set<vd_face_descriptor> visited_faces;
+        auto &G = voronoi->graph;
+        for (auto fd : faces) {
+            if (get(cmap, fd) != -1) continue;
+
+            if (visited_faces.contains(fd)) continue;
+
+            // Found a disconnected component
+            Disconnected_component comp;
+
+            std::queue<vd_face_descriptor> queue;
+            queue.push(fd);
+
+            // Search for all faces in the disconnected component
+            while (!queue.empty()) {
+                auto fd = queue.front();
+                queue.pop();
+
+                if (visited_faces.contains(fd)) continue;
+                visited_faces.insert(fd);
+
+                comp.faces.insert(fd);
+
+                for (auto hd : CGAL::halfedges_around_face(halfedge(fd, G), G)) {
+                    auto nfd = face(opposite(hd, G), G);
+                    auto site = get(cmap, nfd);
+                    if (site == -1) {
+                        // nfd is part of the disconnected component
+                        queue.push(nfd);
+                    } else {
+                        // nfd is part of a principal component around current disconnected component
+                        comp.neighbor_sites.insert(site);
+                    }
+
+                    auto ed = edge(hd, G);
+                    if (voronoi->is_boundary_edge(ed)) {
+                        comp.boundary_edges.insert(ed);
+                    } else if (voronoi->is_bisector_edge(ed)) {
+                        comp.bisector_edges.insert(ed);
+                    }
+                }
+            }
+
+            // Check if the disconnected component group contains a site from a neighboring principal component
+            auto cmap_copy = cmap;
+            bool split = false;
+            for (auto fd : comp.faces) {
+                auto site = voronoi->cell_site(fd);
+                if (comp.neighbor_sites.contains(site)) {
+                    // If so, mark it as a principal component so that it will not be removed
+                    split = true;
+                    put(cmap_copy, fd, site);
+                }
+            }
+
+            // The rest of the disconnected component group will be removed
+            if (split) {
+                _scan_disconnected_components(cmap_copy, components, comp.faces);
+                continue;
+            }
+
+            // Otherwise, add the disconnected component group to the list
+            // Search for all inward trace edges
+            for (auto fd : comp.faces) {
+                for (auto vd : CGAL::vertices_around_face(halfedge(fd, G), G)) {
+                    for (auto hd : CGAL::halfedges_around_target(vd, G)) {
+                        if (voronoi->is_boundary_edge(hd) || comp.faces.contains(face(hd, G)) ||
+                            comp.faces.contains(face(opposite(hd, G), G))) {
+                            continue;
+                        }
+                        auto vt = target(hd, G);
+                        CGAL_assertion(
+                            std::holds_alternative<Three_site_bisector_info>(get(voronoi->vertex_info_map, vt)));
+                        comp.trace_inward_edges.insert(hd);
+                    }
+                }
+            }
+
+            components.push_back(std::move(comp));
+        }
+    }
+
+    void scan_disconnected_components(const auto &cmap, std::vector<Disconnected_component> &components) const {
+        components.clear();
+        _scan_disconnected_components(cmap, components, faces(voronoi->graph));
+    }
+
+    void scan_disconnected_components(const auto &cmap) const {
+        m_disconnected_components_cache.clear();
+        _scan_disconnected_components(cmap, m_disconnected_components_cache, faces(voronoi->graph));
+    }
+
+    void add_traces(const Disconnected_component &comp) {
+        disable_all_sites();
+        enable_sites(comp.neighbor_sites.cbegin(), comp.neighbor_sites.cend());
+        bounding_vertices.clear();
+        processed_b_verts.clear();
+
+        auto &G = voronoi->graph;
+
+        for (auto ed : comp.bisector_edges) {
+            voronoi->remove_edge(ed);
+        }
+
+        for (auto ed : comp.boundary_edges) {
+            voronoi->detach_edge(ed);
+        }
+
+        for (auto ed : comp.boundary_edges) {
+            auto hd = halfedge(ed, voronoi->graph);
+            auto vs = source(hd, voronoi->graph), vt = target(hd, voronoi->graph);
+            auto mesh_hd = std::get<Boundary_edge_info>(get(voronoi->edge_info_map, ed)).hd;
+            auto b_line = mesh_edge_segment(mesh_hd);
+            auto ps = get(voronoi->vpm, vs), pt = get(voronoi->vpm, vt);
+            FT ts = b_line.parameter(ps), tt = b_line.parameter(pt);
+            if (ts > tt) {
+                std::swap(vs, vt);
+                std::swap(ps, pt);
+                std::swap(ts, tt);
+            }
+
+            Cone_descriptor k0;
+            find_nearest_site(ps, k0);
+            vout << CGAL::IO::level(2) << SOURCE_LOC << ": tracing boundary " << mesh_hd << " with cone "
+                 << cone_index(k0) << " between point " << ps << " and " << pt << std::endl;
+            auto [k1, vd] = trace_boundary(mesh_hd, k0, vs, true, true, true, false, dummy_face, dummy_face, ts, tt);
+
+            voronoi->connect(vd, vt, dummy_face, dummy_face, Boundary_edge_info{mesh_hd},
+                             Halfedge_info{k1, face(mesh_hd, G)}, Halfedge_info{k1, face(opposite(mesh_hd, G), G)});
+        }
+        for (auto hd : comp.trace_inward_edges) {
+            add_itrace_from_voronoi_edge(hd);
+        }
+    }
+
+    void add_itrace_from_voronoi_edge(vd_halfedge_descriptor hd) {
+        auto &vg = voronoi->graph;
+
+        auto [k0, mesh_fd] = get(voronoi->halfedge_info_map, hd);
+        auto [k1, _] = get(voronoi->halfedge_info_map, opposite(hd, vg));
+        auto mesh_hd = halfedge(mesh_fd, mesh);
+        auto vs = source(hd, vg), vt = target(hd, vg);
+        auto ps = get(voronoi->vpm, vs), pt = get(voronoi->vpm, vt);
+
+        Bisector_segment_id bisect_id{cone_index(k0), cone_index(k1), get(face_index_map, mesh_fd)};
+        i_traces.push_back({
+            construct_parametric_line(pt, construct_vector(ps, pt)),
+            {},
+            mesh_face_plane(mesh_hd),
+            mesh_hd,
+            mesh_graph_traits::null_halfedge(),  // vt was a 3-site bisector inside the cone k0 and k1
+            k0,
+            k1,
+            {},
+            metric_graph_traits::null_halfedge(),
+            vt,
+        });
+        bounding_vertices.emplace(bisect_id, vt);
+    }
+
+    auto join_edges(vd_vertex_descriptor vd) {
+        auto &graph = voronoi->graph;
+        auto hd0 = halfedge(vd, graph);
+        if (hd0 == vd_graph_traits::null_halfedge()) {
+            return hd0;
+        }
+
+        CGAL_precondition(degree(vd, voronoi->graph) == 2);
+
+        auto hd1 = next(hd0, graph);
+        auto hd0_opposite = opposite(hd0, graph);
+        CGAL_precondition(CGAL::next(CGAL::opposite(hd1, graph), graph) == CGAL::opposite(hd0, graph));
+        auto ed0 = edge(hd0, graph), ed1 = edge(hd1, graph);
+        voronoi->detach_edge(ed0);
+        voronoi->detach_edge(ed1);
+        auto vs = source(hd0, graph), vt = target(hd1, graph);
+        auto hd_new = voronoi->connect(vs, vt, CGAL::face(hd0, graph), CGAL::face(hd0_opposite, graph),
+                                       get(voronoi->edge_info_map, ed0), get(voronoi->halfedge_info_map, hd0),
+                                       get(voronoi->halfedge_info_map, hd0_opposite));
+        CGAL::remove_edge(ed0, graph);
+        CGAL::remove_edge(ed1, graph);
+        return hd_new;
+    }
+
+    void prune_bounding_vertices(const Disconnected_component &comp) {
+        for (auto ed : comp.boundary_edges) {
+            auto hd = halfedge(ed, voronoi->graph);
+            auto vs = source(hd, voronoi->graph), vt = target(hd, voronoi->graph);
+            if (std::holds_alternative<Boundary_bisector_info>(get(voronoi->vertex_info_map, vs))) {
+                join_edges(vs);
+            }
+            if (std::holds_alternative<Boundary_bisector_info>(get(voronoi->vertex_info_map, vt))) {
+                join_edges(vt);
+            }
+            CGAL::remove_edge(ed, voronoi->graph);
+        }
+
+        for (auto hd : comp.trace_inward_edges) {
+            auto vs = source(hd, voronoi->graph), vt = target(hd, voronoi->graph);
+            join_edges(vt);
+        }
+    }
+
 #pragma endregion
 };
 }  // namespace SSM_restricted_voronoi_diagram
