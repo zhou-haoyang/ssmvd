@@ -589,13 +589,31 @@ class SSM_restricted_voronoi_diagram {
             return true;
         }
 
+        bool is_valid_polygon_mesh() const {
+            for (auto fd : faces(graph)) {
+                auto n = PMP::compute_face_normal(fd, graph);
+                auto dt = Projection_traits_3<Kernel>(n);
+                std::vector<Point_3> vertices;
+                for (auto vd : vertices_around_face(halfedge(fd, graph), graph)) {
+                    vertices.push_back(get(vpm, vd));
+                }
+                if (!CGAL::is_simple_2(vertices.begin(), vertices.end(), dt)) {
+                    return false;
+                }
+                if (CGAL::orientation_2(vertices.begin(), vertices.end(), dt) != COUNTERCLOCKWISE) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         template <class... Ts>
         struct overloaded : Ts... {
             using Ts::operator()...;
         };
 
         // explicit deduction guide (not needed as of C++20)
-        template<class... Ts>
+        template <class... Ts>
         overloaded(Ts...) -> overloaded<Ts...>;
 
         bool check_topology() const {
@@ -1418,9 +1436,10 @@ class SSM_restricted_voronoi_diagram {
         process_i_traces();
 
         trace_faces();
-        CGAL_postcondition(is_valid_face_graph(voronoi->graph, verbosity() > 0));
+        CGAL_postcondition(is_valid_polygon_mesh(voronoi->graph, verbosity() > 0));
         CGAL_postcondition(voronoi->check_halfedge_info(add_boundary_edges));
         CGAL_postcondition(voronoi->check_topology());
+        CGAL_postcondition(voronoi->is_valid_polygon_mesh());
 
         vout << IO::level(0) << "profiling: boundary trace: count = " << b_trace_timer.intervals()
              << ", time = " << b_trace_timer.time() << "s, speed = " << b_trace_timer.time() / b_trace_timer.intervals()
