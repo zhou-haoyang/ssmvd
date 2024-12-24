@@ -1490,14 +1490,6 @@ class SSM_restricted_voronoi_diagram {
         return component_map;
     }
 
-    void trace_principal_components(const auto &seed_mesh_faces, auto &component_map) {
-        std::vector<Point_3> seed_points;
-        for (auto &c : m_sites) {
-            seed_points.push_back(c.point);
-        }
-        trace_principal_components(seed_points, seed_mesh_faces, component_map);
-    }
-
     Face_component_map trace_principal_components(const auto &seed_mesh_faces) {
         Face_component_map component_map{get(Face_component_property{}, voronoi->graph)};
         trace_principal_components(seed_mesh_faces, component_map);
