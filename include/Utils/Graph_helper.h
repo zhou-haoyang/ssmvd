@@ -24,34 +24,38 @@ class Projection_traits_with_scalar_product_3 : public Kernel {
     using typename Kernel::Vector_3;
     using Vector_2 = typename Kernel::Vector_3;
 
+    explicit Projection_traits_with_scalar_product_3(const typename Kernel::Vector_3 &n, const Kernel &k)
+        : m_n(n), m_k(k) {}
+
+    auto construct_vector_2_object() const { return m_k.construct_vector_3_object(); }
+
     auto compute_scalar_product_2_object() const {
         return [this](const Vector_2 &v1, const Vector_2 &v2) {
-            auto dot = Kernel().compute_scalar_product_3_object();
+            auto dot = m_k.compute_scalar_product_3_object();
             return dot(v1, v2) - dot(v1, m_n) * dot(v2, m_n) / dot(m_n, m_n);
         };
     }
 
     auto compute_squared_length_2_object() const {
         return [this](const Vector_2 &v) {
-            auto dot = Kernel().compute_scalar_product_3_object();
+            auto dot = m_k.compute_scalar_product_3_object();
             auto proj = dot(v, m_n);
             return dot(v, v) - proj * proj / dot(m_n, m_n);
         };
     }
 
     auto orientation_2_object() const {
-        return [this](const Vector_2 &v1, const Vector_2 &v2) { return Kernel::orientation_3_object()(v1, v2, m_n); };
+        return [this](const Vector_2 &v1, const Vector_2 &v2) { return m_k.orientation_3_object()(v1, v2, m_n); };
     }
 
-    explicit Projection_traits_with_scalar_product_3(const typename Kernel::Vector_3 &n) : m_n(n) {}
-
    private:
+    const Kernel &m_k;
     Vector_3 m_n;
 };
 
 template <class G, class VPM, class GT>
-void insert_halfedge_loop_3(typename boost::graph_traits<G>::halfedge_descriptor hd, G &graph,
-                            const typename GT::Vector_3 &n, const VPM &vpm, const GT &traits) {
+void insert_halfedge_loop(typename boost::graph_traits<G>::halfedge_descriptor hd, G &graph, const VPM &vpm,
+                          const GT &traits) {
     using vd_graph_traits = boost::graph_traits<G>;
     using FT = typename GT::FT;
 
@@ -67,14 +71,12 @@ void insert_halfedge_loop_3(typename boost::graph_traits<G>::halfedge_descriptor
         // At least 2 halfedges around the target vertex
         auto pt = get(vpm, vt), ps = get(vpm, vs);
 
-        // The halfedge loop around the vertex should be clockwise for the halfedge loop around the face
-        // to be counter-clockwise, hence the normal should point inward here
-        Projection_traits_with_scalar_product_3<GT> proj_traits{-n};
-
         auto hd0 = hd_cur;
-        auto v0 = get(vpm, source(hd0, graph)) - pt;
-        auto v = ps - pt;
-        auto t = angle_func(v0, v, proj_traits);
+
+        auto vec = traits.construct_vector_2_object();
+        auto v0 = vec(pt, get(vpm, source(hd0, graph)));
+        auto v = vec(pt, ps);
+        auto t = angle_func(v0, v, traits);
         FT t_cur = -2;  // angle_func(v0, v_cur, proj_traits);
 
         // std::clog << "***" << std::endl;
@@ -84,7 +86,7 @@ void insert_halfedge_loop_3(typename boost::graph_traits<G>::halfedge_descriptor
         // std::clog << "---" << std::endl;
         do {
             auto v_next = get(vpm, source(hd_next, graph)) - pt;
-            auto t_next = angle_func(v0, v_next, proj_traits);
+            auto t_next = angle_func(v0, v_next, traits);
 
             // std::clog << "t range: " << t_cur << " " << t_next << std::endl;
             // std::clog << "---" << std::endl;
@@ -106,9 +108,9 @@ void insert_halfedge_loop_3(typename boost::graph_traits<G>::halfedge_descriptor
 }
 
 template <class G, class GT, class VPM>
-typename boost::graph_traits<G>::halfedge_descriptor connect_vertices_3(
+typename boost::graph_traits<G>::halfedge_descriptor connect_vertices(
     typename boost::graph_traits<G>::vertex_descriptor v0, typename boost::graph_traits<G>::vertex_descriptor v1,
-    G &graph, const typename GT::Vector_3 &n0, const typename GT::Vector_3 &n1, const VPM &vpm, const GT &traits = {}) {
+    G &graph, const VPM &vpm, const GT &gt0, const GT &gt1) {
     using vd_graph_traits = boost::graph_traits<G>;
 
     CGAL_precondition(v0 != v1);
@@ -127,10 +129,30 @@ typename boost::graph_traits<G>::halfedge_descriptor connect_vertices_3(
     set_target(hd10, v0, graph);
     set_next(hd01, hd10, graph);
     set_next(hd10, hd01, graph);
-    insert_halfedge_loop_3(hd10, graph, n0, vpm, traits);
-    insert_halfedge_loop_3(hd01, graph, n1, vpm, traits);
+
+    insert_halfedge_loop(hd10, graph, vpm, gt0);
+    insert_halfedge_loop(hd01, graph, vpm, gt1);
 
     return hd01;
+}
+
+template <class G, class GT, class VPM>
+typename boost::graph_traits<G>::halfedge_descriptor connect_vertices_3(
+    typename boost::graph_traits<G>::vertex_descriptor v0, typename boost::graph_traits<G>::vertex_descriptor v1,
+    G &graph, const typename GT::Vector_3 &n0, const typename GT::Vector_3 &n1, const VPM &vpm, const GT &traits = {}) {
+    // The halfedge loop around the vertex should be clockwise for the halfedge loop around the face
+    // to be counter-clockwise, hence the normal should point inward here
+    Projection_traits_with_scalar_product_3<GT> gt0{-n0, traits};
+    Projection_traits_with_scalar_product_3<GT> gt1{-n1, traits};
+
+    return connect_vertices(v0, v1, graph, vpm, gt0, gt1);
+}
+
+template <class G, class GT, class VPM>
+typename boost::graph_traits<G>::halfedge_descriptor connect_vertices_2(
+    typename boost::graph_traits<G>::vertex_descriptor v0, typename boost::graph_traits<G>::vertex_descriptor v1,
+    G &graph, const VPM &vpm, const GT &traits = {}) {
+    return connect_vertices(v0, v1, graph, vpm, traits, traits);
 }
 }  // namespace CGAL
 #endif  // UTILS_GRAPH_HELPER_H

@@ -6,6 +6,7 @@
 #include <SSM_restricted_voronoi_diagram/SSM_restricted_voronoi_diagram_traits.h>
 #include <IO/Verbosity_level_ostream.h>
 #include <Parametric_line/Parametric_line_3.h>
+#include <Utils/Graph_helper.h>
 
 #include <CGAL/basic.h>
 #include <CGAL/boost/graph/IO/OFF.h>
@@ -365,87 +366,14 @@ class SSM_restricted_voronoi_diagram {
             }
         }
 
-        static Vector_3 normalized(const Vector_3 &v) {
-            auto n = v.squared_length();
-            CGAL_assertion(!is_zero(n));
-            return v / approximate_sqrt(n);
-        }
-
-        void insert_halfedge_loop(vd_halfedge_descriptor hd) {
-            auto vt = target(hd, graph), vs = source(hd, graph);
-            auto hd_cur = halfedge(vt, graph);
-            if (hd_cur == vd_graph_traits::null_halfedge()) {
-                set_halfedge(vt, hd, graph);
-                return;
-            }
-
-            if (hd_cur != opposite(next(hd_cur, graph), graph)) {
-                // At least 2 halfedges around the target vertex
-
-                auto n = normalized(get(vertex_normal_map, vt));
-
-                // Project the vector to the tangent plane defined by n
-                auto proj = [&n](const auto &v) { return normalized(v - scalar_product(v, n) * n); };
-
-                auto pt = get(vpm, vt), ps = get(vpm, vs);
-                auto v = proj(ps - pt);
-                auto v_cur = proj(get(vpm, source(hd_cur, graph)) - pt);
-
-                auto hd0 = hd_cur;
-                bool found = false;
-                do {
-                    auto hd_next = opposite(next(hd_cur, graph), graph);
-                    auto v_next = proj(get(vpm, source(hd_next, graph)) - pt);
-
-                    // A monotonic angle function in [-2, 2]
-                    auto angle = [](const auto &v1, const auto &v2, const auto &n) {
-                        auto cos_theta = scalar_product(v1, v2);
-                        auto ori = orientation(n, v1, v2);
-                        if (ori == ZERO) {
-                            return cos_theta < 0 ? cos_theta + 1 : -cos_theta - 1;
-                        } else {
-                            return ori == NEGATIVE ? cos_theta + 1 : -cos_theta - 1;
-                        }
-                    };
-
-                    // The halfedge loop around the vertex should be clockwise for the halfedge loop around the face
-                    // to be counter-clockwise, hence the normal should point inward here
-                    if (angle(v_cur, v, -n) < angle(v_cur, v_next, -n)) {
-                        found = true;
-                        break;
-                    }
-
-                    hd_cur = hd_next;
-                    v_cur = v_next;
-                } while (hd_cur != hd0);
-                CGAL_assertion(found);
-            }
-
-            set_next(hd, next(hd_cur, graph), graph);
-            set_next(hd_cur, opposite(hd, graph), graph);
-        }
-
         vd_halfedge_descriptor connect(vd_vertex_descriptor v0, vd_vertex_descriptor v1, vd_face_descriptor fd01,
                                        vd_face_descriptor fd10, Edge_info info, Halfedge_info hinfo01,
                                        Halfedge_info hinfo10) {
-            CGAL_precondition(v0 != v1);
-            CGAL_precondition(v0 != vd_graph_traits::null_vertex() && v1 != vd_graph_traits::null_vertex());
-
-            if (halfedge(v1, graph) != vd_graph_traits::null_halfedge()) {
-                for (auto hd : halfedges_around_target(v1, graph)) {
-                    if (source(hd, graph) == v0) return hd;
-                }
-            }
-
-            auto ed = CGAL::add_edge(graph);
-            auto hd01 = halfedge(ed, graph);
+            auto n0 = get(vertex_normal_map, v0);
+            auto n1 = get(vertex_normal_map, v1);
+            auto hd01 = connect_vertices_3(v0, v1, graph, n0, n1, vpm, Kernel{});
             auto hd10 = opposite(hd01, graph);
-            set_target(hd01, v1, graph);
-            set_target(hd10, v0, graph);
-            set_next(hd01, hd10, graph);
-            set_next(hd10, hd01, graph);
-            insert_halfedge_loop(hd10);
-            insert_halfedge_loop(hd01);
+            auto ed = edge(hd01, graph);
 
             set_face(hd01, fd01, graph);
             set_face(hd10, fd10, graph);
