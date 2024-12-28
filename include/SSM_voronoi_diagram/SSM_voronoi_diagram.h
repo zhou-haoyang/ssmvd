@@ -1,6 +1,7 @@
 #ifndef SSM_VORONOI_DIAGRAM_SSM_VORONOI_DIAGRAM_H
 #define SSM_VORONOI_DIAGRAM_SSM_VORONOI_DIAGRAM_H
 
+#include <Utils/Graph_helper.h>
 #include <CGAL/Default.h>
 #include <CGAL/Dynamic_property_map.h>
 #include <CGAL/Origin.h>
@@ -197,74 +198,10 @@ class SSM_voronoi_diagram {
             return vd;
         }
 
-        Vector_2 normalized(const Vector_2& v) const {
-            FT n = v.squared_length();
-            CGAL_assertion(!is_zero(n));
-            return v / approximate_sqrt(n);
-        }
-
-        void insert_halfedge_loop(vd_halfedge_descriptor hd) {
-            auto vt = target(hd, graph), vs = source(hd, graph);
-            auto hd_cur = halfedge(vt, graph);
-            if (hd_cur == vd_graph_traits::null_halfedge()) {
-                set_halfedge(vt, hd, graph);
-                return;
-            }
-
-            if (hd_cur != opposite(next(hd_cur, graph), graph)) {
-                // At least 2 halfedges around the target vertex
-                auto pt = get(vpm, vt), ps = get(vpm, vs);
-                auto v = normalized(ps - pt);
-                // auto v = ps - pt;
-
-                auto v_cur = normalized(get(vpm, source(hd_cur, graph)) - pt);
-
-                for (;;) {
-                    auto hd_next = opposite(next(hd_cur, graph), graph);
-                    auto v_next = normalized(get(vpm, source(hd_next, graph)) - pt);
-
-                    // A monotonic angle function in [-2, 2]
-                    auto angle = [this](const auto& v1, const auto& v2) {
-                        auto cos_theta = scalar_product(v1, v2);
-                        auto ori = orientation(v1, v2);
-                        if (ori == ZERO) {
-                            return cos_theta < 0 ? cos_theta + 1 : -cos_theta - 1;
-                        } else {
-                            // The halfedge loop around the vertex should be clockwise for the halfedge loop around the
-                            // face to be counter-clockwise, hence the normal should point inward here
-                            return ori == POSITIVE ? cos_theta + 1 : -cos_theta - 1;
-                        }
-                    };
-
-                    if (angle(v_cur, v) < angle(v_cur, v_next)) break;
-
-                    hd_cur = hd_next;
-                    v_cur = v_next;
-                }
-            }
-
-            set_next(hd, next(hd_cur, graph), graph);
-            set_next(hd_cur, opposite(hd, graph), graph);
-        }
-
         vd_halfedge_descriptor connect(vd_vertex_descriptor v0, vd_vertex_descriptor v1, vd_face_descriptor fd01,
                                        vd_face_descriptor fd10) {
-            CGAL_precondition(v0 != v1);
-            if (halfedge(v1, graph) != vd_graph_traits::null_halfedge()) {
-                for (auto hd : halfedges_around_target(v1, graph)) {
-                    if (source(hd, graph) == v0) return hd;
-                }
-            }
-
-            auto ed = CGAL::add_edge(graph);
-            auto hd01 = halfedge(ed, graph);
+            auto hd01 = connect_vertices_2(v0, v1, graph, vpm, m_traits);
             auto hd10 = opposite(hd01, graph);
-            set_target(hd01, v1, graph);
-            set_target(hd10, v0, graph);
-            set_next(hd01, hd10, graph);
-            set_next(hd10, hd01, graph);
-            insert_halfedge_loop(hd10);
-            insert_halfedge_loop(hd01);
 
             set_face(hd01, fd01, graph);
             set_face(hd10, fd10, graph);
