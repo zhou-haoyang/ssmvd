@@ -2,6 +2,8 @@
 #define SSM_VORONOI_DIAGRAM_SSM_VORONOI_DIAGRAM_H
 
 #include <Utils/Graph_helper.h>
+#include <Utils/Overloaded.h>
+
 #include <CGAL/Default.h>
 #include <CGAL/Dynamic_property_map.h>
 #include <CGAL/Origin.h>
@@ -747,13 +749,6 @@ class SSM_voronoi_diagram {
         remove_face(m_dummy_face, m_voronoi->graph);
     }
 
-    template <class... Ts>
-    struct overloaded : Ts... {
-        using Ts::operator()...;
-    };
-    // explicit deduction guide (not needed as of C++20)
-    template <class... Ts>
-    overloaded(Ts...) -> overloaded<Ts...>;
 
     bool check_voronoi_diagram(FT eps = 1e-6) const {
         for (auto vd : vertices(m_voronoi->graph)) {
