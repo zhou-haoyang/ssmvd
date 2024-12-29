@@ -20,7 +20,6 @@ class SSM_voronoi_diagram_traits : public K, public Parametric_line_traits_2<K>,
     using Parametric_line_2 = typename Parametric_line_traits::Parametric_line_2;
 
     using Polygon_2 = Polygon_2<K>;
-    using Metric = Polygon_2;
     using Metric_traits = MetricTraits;
 
     using Voronoi_diagram = VoronoiDiagram;
@@ -29,9 +28,6 @@ class SSM_voronoi_diagram_traits : public K, public Parametric_line_traits_2<K>,
     using Parametric_line_traits::construct_point_on_2_object;
     using Parametric_line_traits::construct_vector_2_object;
     using Parametric_line_traits::intersect_2_object;
-
-    using MetricTraits::metric_any_intersected_edge_object;
-    using MetricTraits::metric_any_intersection_object;
 };
 }  // namespace CGAL::SSM_voronoi_diagram
 

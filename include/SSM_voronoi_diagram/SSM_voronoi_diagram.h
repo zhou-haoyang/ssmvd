@@ -51,9 +51,10 @@ class SSM_voronoi_diagram {
     using Parameter_pair = typename Traits::Parameter_pair;
     using Colinear = typename Traits::Colinear;
 
-    using Metric = typename Traits::Metric;
     using Metric_traits = typename Traits::Metric_traits;
-    using Metric_edge_iterator = typename Metric::Edge_const_iterator;
+    using Metric = typename Metric_traits::Metric;
+    using Metric_vertex_circulator = typename Metric_traits::Metric_vertex_circulator;
+    using Metric_edge_circulator = typename Metric_traits::Metric_edge_circulator;
 
     class Metric_data {
        public:
@@ -66,14 +67,11 @@ class SSM_voronoi_diagram {
 
         auto any_intersected_edge(const Vector_2& d) { return _any_intersected_edge(m_polygon, d); }
 
-        auto index(Metric_edge_iterator ed) const { return std::distance(m_polygon.edges_begin(), ed); }
+        auto index(Metric_vertex_circulator vd) const { return std::distance(m_polygon.vertices_circulator(), vd); }
 
-        Metric_edge_iterator next_edge(Metric_edge_iterator ed) const {
-            return ++ed == m_polygon.edges_end() ? m_polygon.edges_begin() : ed;
-        }
-
-        Metric_edge_iterator prev_edge(Metric_edge_iterator ed) const {
-            return ed == m_polygon.edges_begin() ? --m_polygon.edges_end() : --ed;
+        auto index(Metric_edge_circulator ed) const {
+            auto [source, target] = *ed;
+            return std::distance(m_polygon.vertices_circulator(), source);
         }
 
        private:
@@ -104,17 +102,17 @@ class SSM_voronoi_diagram {
 
     class Cone_descriptor {
        public:
-        Cone_descriptor(Site_const_iterator s = {}, Metric_edge_iterator e = {})
+        Cone_descriptor(Site_const_iterator s = {}, Metric_edge_circulator e = {})
             : m_site(std::move(s)), m_edge(std::move(e)) {}
 
         PROPERTY(Site_const_iterator, site)
-        PROPERTY(Metric_edge_iterator, edge)
+        PROPERTY(Metric_edge_circulator, edge)
 
         bool operator==(const Cone_descriptor& other) const { return m_site == other.m_site && m_edge == other.m_edge; }
 
        private:
         Site_const_iterator m_site;
-        Metric_edge_iterator m_edge;
+        Metric_edge_circulator m_edge;
     };
 
     using Boundary = Polygon_2;
@@ -153,7 +151,7 @@ class SSM_voronoi_diagram {
     struct Two_site_bisector_info {
         Cone_descriptor k0;
         Site_const_iterator c1;
-        Metric_edge_iterator e1;
+        Metric_edge_circulator e1;
     };
 
     struct Three_site_bisector_info {
@@ -336,7 +334,7 @@ class SSM_voronoi_diagram {
     };
 
     struct Intervals {
-        using value_type = std::pair<Metric_edge_iterator, Cone_line_intersection>;
+        using value_type = std::pair<Metric_edge_circulator, Cone_line_intersection>;
         using iterator = Intervals_iterator;
 
         value_type operator[](std::size_t idx) const {
@@ -374,7 +372,7 @@ class SSM_voronoi_diagram {
             return is_infinite() ? std::nullopt : std::make_optional(ts.back());
         }
 
-        iterator find_cone(Metric_edge_iterator ed) {
+        iterator find_cone(Metric_edge_circulator ed) {
             // if (idx_map.empty()) {
             //     for (std::size_t i = 0; i < eds.size(); ++i) {
             //         idx_map[eds[i]] = i;
@@ -397,7 +395,7 @@ class SSM_voronoi_diagram {
             // idx_map.clear();
         }
 
-        void add_edge(Metric_edge_iterator ed) { eds.push_back(ed); }
+        void add_edge(Metric_edge_circulator ed) { eds.push_back(ed); }
 
         void add_intersection(FT t) {
             CGAL_assertion(empty() || t >= t_max());
@@ -434,10 +432,10 @@ class SSM_voronoi_diagram {
         }
 
        private:
-        std::vector<FT> ts;                     // N+1
-        std::vector<Metric_edge_iterator> eds;  // N
+        std::vector<FT> ts;                       // N+1
+        std::vector<Metric_edge_circulator> eds;  // N
 
-        // mutable std::unordered_map<Metric_edge_iterator, size_t> idx_map;
+        // mutable std::unordered_map<Metric_edge_circulator, size_t> idx_map;
     };
 
     enum Endpoint_type { CCW = 1, SITE = 0, CW = -1, UNKNOWN = -2 };
@@ -504,7 +502,7 @@ class SSM_voronoi_diagram {
     void clear_metrics() { m_metrics.clear(); }
 
     /// VD construction
-    std::optional<FT> distance(Site_const_iterator site_it, const Point_2& p, Metric_edge_iterator& ed_out) const {
+    std::optional<FT> distance(Site_const_iterator site_it, const Point_2& p, Metric_edge_circulator& ed_out) const {
         auto res = site_it->metric()->any_intersection(construct_vector(site_it->point(), p));
         if (!res) return std::nullopt;
         ed_out = res->second;
@@ -519,7 +517,7 @@ class SSM_voronoi_diagram {
         bool init = true;
 
         for (auto site_it = m_sites.begin(); site_it != m_sites.end(); ++site_it) {
-            Metric_edge_iterator ed;
+            Metric_edge_circulator ed;
             auto res = distance(site_it, p, ed);
             if (!res) continue;
             FT d = *res;
@@ -783,7 +781,7 @@ class SSM_voronoi_diagram {
                                Point_2 p = get(m_voronoi->vpm, vd);
                                std::clog << "type: boundary bisector: " << p << std::endl;
                                auto [ed, k0, k1] = info;
-                               Metric_edge_iterator ed0, ed1;
+                               Metric_edge_circulator ed0, ed1;
                                auto d0 = distance(k0.site(), p, ed0);
                                auto d1 = distance(k1.site(), p, ed1);
 
@@ -917,8 +915,13 @@ class SSM_voronoi_diagram {
             } else if (is_zero(tr)) {
                 CGAL_assertion_msg(false, "TODO: case 1.b");
             } else {
-                auto next_edge = type == CCW ? k_cur.site()->metric()->next_edge(k_cur.edge())
-                                             : k_cur.site()->metric()->prev_edge(k_cur.edge());
+                auto next_edge = k_cur.edge();
+                if (prev_type == CCW) {
+                    ++next_edge;
+                } else {
+                    --next_edge;
+                }
+
                 return Next_interval_info{Cone_descriptor(k_cur.site(), next_edge), ts, type};
             }
         };
@@ -953,7 +956,7 @@ class SSM_voronoi_diagram {
         // auto isect1 = metric_any_intersected_face(m.data, construct_vector(c.point, pmax));
 
         CGAL_assertion(!!isect);
-        Metric_edge_iterator ed0 = *isect;
+        Metric_edge_circulator ed0 = *isect;
 
         Cone_descriptor k0(site, ed0);
         res.add_intersection(tmin);
@@ -1065,7 +1068,9 @@ class SSM_voronoi_diagram {
     Vector_2 orthogonal_vector(const Line_2& l) const { return construct_vector(ca(l), cb(l)); }
 
     Line_2 get_bisector(const Cone_descriptor& k0, const Cone_descriptor& k1) {
-        Line_2 l0 = construct_line(*(k0.edge())), l1 = construct_line(*(k1.edge()));
+        auto [m00, m01] = *k0.edge();
+        auto [m10, m11] = *k1.edge();
+        Line_2 l0 = construct_line(*m00, *m01), l1 = construct_line(*m10, *m11);
         Vector_2 nd0 = orthogonal_vector(l0) / cc(l0), nd1 = orthogonal_vector(l1) / cc(l1);
         Vector_2 AB = nd0 - nd1;
         FT C = scalar_product(nd1, construct_vector(ORIGIN, k1.site()->point())) -
