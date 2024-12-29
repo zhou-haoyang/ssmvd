@@ -151,7 +151,7 @@ class SSM_voronoi_diagram {
     struct Two_site_bisector_info {
         Cone_descriptor k0;
         Site_const_iterator c1;
-        Metric_edge_circulator e1;
+        Metric_vertex_circulator m1;
     };
 
     struct Three_site_bisector_info {
@@ -478,6 +478,7 @@ class SSM_voronoi_diagram {
     auto& boundary() const { return m_boundary; }
     auto& traits() const { return m_traits; }
 
+    auto num_sites() const { return m_sites.size(); }
     auto sites() const { return Iterator_range(m_sites.cbegin(), m_sites.cend()); }
     auto metrics() const { return Iterator_range(m_metrics.cbegin(), m_metrics.cend()); }
     auto i_traces() const { return Iterator_range(m_i_traces.cbegin(), m_i_traces.cend()); }
@@ -1206,7 +1207,8 @@ class SSM_voronoi_diagram {
             }
 
             Point_2 p = construct_point_on(tr.bisector, k_next_info->ts);
-            auto v_vd = m_voronoi->add_vertex(p, Two_site_bisector_info{k0_next, k1_next.site(), k1_next.edge()});
+            auto [m10, m11] = *k1_prev.edge();
+            auto v_vd = m_voronoi->add_vertex(p, Two_site_bisector_info{k0_next, k1_next.site(), k_next_info->type == CCW ? m11 : m10});
             m_voronoi->connect(tr.v_vd, v_vd, m_dummy_face, m_dummy_face);
             m_i_vertices.emplace(v_id, v_vd);
 
