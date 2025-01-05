@@ -16,7 +16,8 @@ class Polygon_2_vertex_pair_circulator {
     using const_reference = const value_type &;
     using iterator_category = Bidirectional_circulator_tag;
 
-    explicit Polygon_2_vertex_pair_circulator(const Metric_vertex_circulator &vertex) : m_vertex(vertex) {}
+    explicit Polygon_2_vertex_pair_circulator(Metric_vertex_circulator vertex = Metric_vertex_circulator{})
+        : m_vertex(std::move(vertex)) {}
 
     bool operator==(const Polygon_2_vertex_pair_circulator &other) const { return m_vertex == other.m_vertex; }
 
