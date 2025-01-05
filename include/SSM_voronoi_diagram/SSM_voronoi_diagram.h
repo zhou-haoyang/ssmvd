@@ -65,9 +65,9 @@ class SSM_voronoi_diagram {
         auto& polygon() const { return m_polygon; }
         auto& traits() const { return m_traits; }
 
-        auto any_intersection(const Vector_2& d) { return _any_intersection(m_polygon, d); }
+        auto any_intersection(const Vector_2& d) const { return _any_intersection(m_polygon, d); }
 
-        auto any_intersected_edge(const Vector_2& d) { return _any_intersected_edge(m_polygon, d); }
+        auto any_intersected_edge(const Vector_2& d) const { return _any_intersected_edge(m_polygon, d); }
 
         auto index(Metric_vertex_circulator vd) const { return std::distance(m_polygon.vertices_circulator(), vd); }
 
@@ -85,7 +85,7 @@ class SSM_voronoi_diagram {
     };
 
     using Metric_list = std::list<Metric_data>;
-    using Metric_iterator = typename Metric_list::iterator;
+    using Metric_iterator = typename Metric_list::const_iterator;
 
     class Site {
        public:
@@ -104,7 +104,7 @@ class SSM_voronoi_diagram {
 
     class Cone_descriptor {
        public:
-        Cone_descriptor(Site_const_iterator s = {}, Metric_edge_circulator e = {})
+        Cone_descriptor(Site_const_iterator s = {}, Metric_edge_circulator e = Metric_edge_circulator{})
             : m_site(std::move(s)), m_edge(std::move(e)) {}
 
         PROPERTY(Site_const_iterator, site)
@@ -481,9 +481,13 @@ class SSM_voronoi_diagram {
     auto& traits() const { return m_traits; }
 
     auto num_sites() const { return m_sites.size(); }
+    auto num_metrics() const { return m_metrics.size(); }
+
     auto sites() const { return Iterator_range(m_sites.cbegin(), m_sites.cend()); }
     auto metrics() const { return Iterator_range(m_metrics.cbegin(), m_metrics.cend()); }
     auto i_traces() const { return Iterator_range(m_i_traces.cbegin(), m_i_traces.cend()); }
+
+    std::size_t site_index(Site_const_iterator site) const { return std::distance(m_sites.cbegin(), site); }
 
     const auto& voronoi_diagram() const { return *m_voronoi; }
     Const_voronoi_diagram_ptr voronoi_diagram_ptr() const { return m_voronoi; }
@@ -840,13 +844,11 @@ class SSM_voronoi_diagram {
 
     TRAIT_FUNC(bool, is_degenerate, is_degenerate_2_object)
 
-    std::size_t site_index(Site_const_iterator site) const { return std::distance(m_sites.cbegin(), site); }
-
     Cone_index cone_index(Cone_descriptor k) const {
         return Cone_index(site_index(k.site()), k.site()->metric()->index(k.edge()));
     }
 
-    Cone_descriptor null_cone() const { return Cone_descriptor(m_sites.end(), {}); }
+    Cone_descriptor null_cone() const { return Cone_descriptor(m_sites.end(), Metric_edge_circulator{}); }
 
     /**
      * @brief Find the intersection of a parametric line with a ray with direction d and starting at the origin.
@@ -923,8 +925,7 @@ class SSM_voronoi_diagram {
         };
 
         if (prev_type == CW || prev_type == UNKNOWN) {
-            auto isect_next =
-                intersect_ray(p, d, construct_vector(ORIGIN, construct_source(*k_cur.edge())), tmin, tmax);
+            auto isect_next = intersect_ray(p, d, construct_vector(ORIGIN, *(k_cur.edge()->first)), tmin, tmax);
             auto res = process_isect(isect_next, CW);
             if (res)
                 return res;
@@ -932,7 +933,7 @@ class SSM_voronoi_diagram {
                 return std::nullopt;
         }
 
-        auto isect_next = intersect_ray(p, d, construct_vector(ORIGIN, construct_target(*k_cur.edge())), tmin, tmax);
+        auto isect_next = intersect_ray(p, d, construct_vector(ORIGIN, *(k_cur.edge()->second)), tmin, tmax);
         return process_isect(isect_next, CCW);
     }
 
@@ -1173,7 +1174,9 @@ class SSM_voronoi_diagram {
             m_i_vertices.emplace(vid, v_vd);
 
             auto d_02 = construct_vector(bi_line_min);
-            Line_2 l0 = construct_line(*(tr.k0.edge())), l1 = construct_line(*(tr.k1.edge()));
+            auto [m00, m01] = *tr.k0.edge();
+            auto [m10, m11] = *tr.k1.edge();
+            Line_2 l0 = construct_line(*m00, *m01), l1 = construct_line(*m10, *m11);
             if (is_positive(scalar_product(d_02, orthogonal_vector(l1) / cc(l1) - orthogonal_vector(l0) / cc(l0)))) {
                 d_02 = opposite_vector(d_02);
             }
@@ -1208,7 +1211,7 @@ class SSM_voronoi_diagram {
             m_i_vertices.emplace(v_id, v_vd);
 
             auto d = construct_vector(get_bisector(k0_next, k1_next));
-            auto m = k_next_info->type == CCW ? construct_target(*k1_prev.edge()) : construct_source(*k1_prev.edge());
+            auto m = k_next_info->type == CCW ? *k1_prev.edge()->second : *k1_prev.edge()->first;
             auto md = construct_vector(ORIGIN, m);
             if (orientation(md, construct_vector(tr.bisector)) != orientation(md, d)) {
                 d = opposite_vector(d);
