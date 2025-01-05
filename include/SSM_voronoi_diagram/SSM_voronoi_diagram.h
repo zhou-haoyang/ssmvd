@@ -914,7 +914,7 @@ class SSM_voronoi_diagram {
                 CGAL_assertion_msg(false, "TODO: case 1.b");
             } else {
                 auto next_edge = k_cur.edge();
-                if (prev_type == CCW) {
+                if (type == CCW) {
                     ++next_edge;
                 } else {
                     --next_edge;
