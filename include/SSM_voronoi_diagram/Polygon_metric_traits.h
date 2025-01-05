@@ -30,7 +30,9 @@ class Polygon_metric_traits {
             auto it0 = Metric_edge_circulator(p.vertices_circulator());
             auto it = it0;
             do {
-                auto isect = CGAL::intersection(Ray_2(ORIGIN, d), *it);
+                auto [m0, m1] = *it;
+                auto segment = K().construct_segment_2_object()(*m0, *m1);
+                auto isect = CGAL::intersection(Ray_2(ORIGIN, d), segment);
                 if (isect) {
                     // The intersection can not be segment here for a valid metric
                     return std::make_pair(std::get<Point_2>(*isect), it);
@@ -46,7 +48,9 @@ class Polygon_metric_traits {
             auto it0 = Metric_edge_circulator(p.vertices_circulator());
             auto it = it0;
             do {
-                if (CGAL::do_intersect(Ray_2(ORIGIN, d), *it)) {
+                auto [m0, m1] = *it;
+                auto segment = K().construct_segment_2_object()(*m0, *m1);
+                if (CGAL::do_intersect(Ray_2(ORIGIN, d), segment)) {
                     return it;
                 }
                 ++it;
