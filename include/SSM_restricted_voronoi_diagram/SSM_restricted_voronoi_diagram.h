@@ -35,6 +35,7 @@
 
 #include <algorithm>
 #include <deque>
+#include <exception>
 #include <limits>
 #include <mutex>
 #include <optional>
@@ -1267,33 +1268,44 @@ class SSM_restricted_voronoi_diagram {
         std::mutex edge_visited_mutex;
         trace = [&](mesh_halfedge_descriptor hd, Cone_descriptor k0) {
             {
-                std::lock_guard lock(edge_visited_mutex);
-                if (get(edge_visited, edge(hd, mesh))) return;
-                put(edge_visited, edge(hd, mesh), true);
+                std::lock_guard lock(exception_mutex);
+                if (exception) return;
             }
 
-            auto prev_vd = vd_graph_traits::null_vertex();
-            if (add_mesh_vertices) {
-                prev_vd = get(vd_map, source(hd, mesh));
-            }
+            try {
+                {
+                    std::lock_guard lock(edge_visited_mutex);
+                    if (get(edge_visited, edge(hd, mesh))) return;
+                    put(edge_visited, edge(hd, mesh), true);
+                }
 
-            bool same_side = !is_border(hd, mesh);
-            bool opposite_side = !is_border(opposite(hd, mesh), mesh);
-            auto fd01 = same_side ? dummy_face : vd_graph_traits::null_face();
-            auto fd10 = opposite_side ? dummy_face : vd_graph_traits::null_face();
+                auto prev_vd = vd_graph_traits::null_vertex();
+                if (add_mesh_vertices) {
+                    prev_vd = get(vd_map, source(hd, mesh));
+                }
 
-            auto [k, v_vd] = trace_boundary(hd, k0, prev_vd, same_side, opposite_side, add_boundary_edges,
-                                            add_cone_vertices, fd01, fd10);
+                bool same_side = !is_border(hd, mesh);
+                bool opposite_side = !is_border(opposite(hd, mesh), mesh);
+                auto fd01 = same_side ? dummy_face : vd_graph_traits::null_face();
+                auto fd10 = opposite_side ? dummy_face : vd_graph_traits::null_face();
 
-            if (add_boundary_edges && add_mesh_vertices) {
-                std::lock_guard lock(vd_mutex);
-                voronoi->connect(v_vd, get(vd_map, target(hd, mesh)), fd01, fd10, Boundary_edge_info{hd},
-                                 Halfedge_info{k, face(hd, mesh)}, Halfedge_info{k, face(opposite(hd, mesh), mesh)});
-            }
+                auto [k, v_vd] = trace_boundary(hd, k0, prev_vd, same_side, opposite_side, add_boundary_edges,
+                                                add_cone_vertices, fd01, fd10);
 
-            for (auto hd_inner : halfedges_around_source(target(hd, mesh), mesh)) {
-                // if (get(edge_visited, edge(hd_inner, mesh))) continue;
-                pool.detach_task(std::bind(trace, hd_inner, k));
+                if (add_boundary_edges && add_mesh_vertices) {
+                    std::lock_guard lock(vd_mutex);
+                    voronoi->connect(v_vd, get(vd_map, target(hd, mesh)), fd01, fd10, Boundary_edge_info{hd},
+                                     Halfedge_info{k, face(hd, mesh)},
+                                     Halfedge_info{k, face(opposite(hd, mesh), mesh)});
+                }
+
+                for (auto hd_inner : halfedges_around_source(target(hd, mesh), mesh)) {
+                    // if (get(edge_visited, edge(hd_inner, mesh))) continue;
+                    pool.detach_task(std::bind(trace, hd_inner, k));
+                }
+            } catch (...) {
+                std::lock_guard lock(exception_mutex);
+                exception = std::current_exception();
             }
         };
 
@@ -1303,6 +1315,7 @@ class SSM_restricted_voronoi_diagram {
 
         // wait for all tasks to finish
         pool.wait();
+        if (exception) std::rethrow_exception(exception);
 
         b_trace_timer.stop();
     }
@@ -1329,6 +1342,8 @@ class SSM_restricted_voronoi_diagram {
         if (i_trace_timer.is_running()) i_trace_timer.stop();
         b_trace_timer.reset();
         i_trace_timer.reset();
+
+        exception = nullptr;
     }
 
     std::optional<Internal_trace> step() {
@@ -1516,7 +1531,10 @@ class SSM_restricted_voronoi_diagram {
     std::vector<Disconnected_component> m_disconnected_components_cache;
     std::unordered_multimap<Bisector_segment_id, vd_vertex_descriptor, Bisector_segment_id_hash> bounding_vertices;
 
+    /// Multithreading
     BS::thread_pool pool;
+    std::exception_ptr exception;
+    std::mutex exception_mutex;
 
     inline CGAL_STATIC_THREAD_LOCAL_VARIABLE_0(Segment_cone_intersections, isects_cache);
     inline CGAL_STATIC_THREAD_LOCAL_VARIABLE_0(std::vector<Segment_cone_intersections>, isects_vec_cache);
@@ -1718,7 +1736,7 @@ class SSM_restricted_voronoi_diagram {
         }
     }
 
-    void process_i_trace(const Internal_trace &tr, bool immediate = true) {
+    void _process_i_trace(const Internal_trace &tr, bool immediate = true) {
         // Check if the bisector has already been traced (from another direction)
         {
             std::lock_guard lock(vd_mutex);
@@ -1978,6 +1996,19 @@ class SSM_restricted_voronoi_diagram {
             voronoi->connect(tr.v_vd, vd_it->second, dummy_face, dummy_face, Bisector_edge_info{},
                              Halfedge_info{tr.k0, mesh_fd}, Halfedge_info{tr.k1, mesh_fd});
             processed_b_verts.emplace(vd_it->second, edge_hd);
+        }
+    }
+
+    void process_i_trace(const Internal_trace &tr, bool immediate = true) {
+        {
+            std::lock_guard lock(exception_mutex);
+            if (exception) return;
+        }
+        try {
+            _process_i_trace(tr, immediate);
+        } catch (...) {
+            std::lock_guard lock(exception_mutex);
+            exception = std::current_exception();
         }
     }
 
