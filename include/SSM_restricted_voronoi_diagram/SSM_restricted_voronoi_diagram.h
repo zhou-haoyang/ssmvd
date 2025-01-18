@@ -810,7 +810,9 @@ class SSM_restricted_voronoi_diagram {
           face_index_map(std::move(face_index_map)),
           edge_index_map(std::move(edge_index_map)),
           pool(num_threads),
-          traits(traits) {}
+          traits(traits) {
+        reset();
+    }
 
     SSM_restricted_voronoi_diagram(const Surface_mesh &mesh,
                                    std::size_t num_threads = std::thread::hardware_concurrency(),
