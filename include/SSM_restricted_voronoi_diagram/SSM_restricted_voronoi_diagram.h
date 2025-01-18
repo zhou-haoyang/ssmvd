@@ -1395,10 +1395,11 @@ class SSM_restricted_voronoi_diagram {
     }
 
 #pragma region DisconnectedComponentRemoval
-    void trace_principal_components(const auto &seed_points, const auto &seed_mesh_faces, auto &component_map) {
+    void trace_principal_components(const auto &seed_sites, const auto &seed_points, const auto &seed_mesh_faces,
+                                    auto &component_map) {
         std::unordered_multimap<mesh_face_descriptor, index_t> seed_face_map;
-        for (index_t c = 0; c < seed_mesh_faces.size(); ++c) {
-            seed_face_map.emplace(seed_mesh_faces[c], c);
+        for (index_t s = 0; s < seed_mesh_faces.size(); ++s) {
+            seed_face_map.emplace(seed_mesh_faces[s], s);
         }
 
         std::vector<vd_face_descriptor> seed_faces;
@@ -1419,7 +1420,7 @@ class SSM_restricted_voronoi_diagram {
                 // }
 
                 if (voronoi->face_bounded_side(fd, p) != CGAL::ON_UNBOUNDED_SIDE) {
-                    put(component_map, fd, it->second);
+                    put(component_map, fd, seed_sites[it->second]);
                     seed_faces.push_back(fd);
                     break;
                 }
@@ -1429,15 +1430,10 @@ class SSM_restricted_voronoi_diagram {
         voronoi->flood_fill_faces(component_map, -1, seed_faces);
     }
 
-    Face_component_map trace_principal_components(const auto &seed_points, const auto &seed_mesh_faces) {
+    Face_component_map trace_principal_components(const auto &seed_sites, const auto &seed_points,
+                                                  const auto &seed_mesh_faces) {
         Face_component_map component_map{get(Face_component_property{}, voronoi->graph)};
-        trace_principal_components(seed_points, seed_mesh_faces, component_map);
-        return component_map;
-    }
-
-    Face_component_map trace_principal_components(const auto &seed_mesh_faces) {
-        Face_component_map component_map{get(Face_component_property{}, voronoi->graph)};
-        trace_principal_components(seed_mesh_faces, component_map);
+        trace_principal_components(seed_sites, seed_points, seed_mesh_faces, component_map);
         return component_map;
     }
 
