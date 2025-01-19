@@ -1,6 +1,7 @@
 #ifndef PARAMETRIC_LINE_PARAMETRIC_LINE_3_H
 #define PARAMETRIC_LINE_PARAMETRIC_LINE_3_H
 
+#include <CGAL/Kernel/global_functions_2.h>
 #include <CGAL/Origin.h>
 
 #include <algorithm>
@@ -110,20 +111,26 @@ class Parametric_line_traits_3 {
             auto d0 = l0.d(), d1 = l1.d();
             auto p0 = l0.p(), p1 = l1.p();
             auto n = cross_product(d0, d1);
-            if (is_zero(n.squared_length())) {
+            FT n_sqr = n.squared_length();
+
+            if (is_zero(n_sqr)) {
                 // parallel
                 return std::nullopt;
             }
 
             auto tn0 = cross_product((p1 - p0), d1);
-            if (!coplanar && !is_zero(scalar_product(tn0, n))) {
+            auto tn0_dot_n = scalar_product(tn0, n);
+            if (!coplanar && !is_zero(tn0_dot_n)) {
                 // not coplanar
                 return std::nullopt;
             }
-            FT t0 = (tn0.x() + tn0.y() + tn0.z()) / (n.x() + n.y() + n.z());
+            // Solve t0 . n = tn0
+            FT t0 = tn0_dot_n / n_sqr;
             // FT t0 = tn0.x() / n.x();
+
             auto tn1 = cross_product((p1 - p0), d0);
-            FT t1 = (tn1.x() + tn1.y() + tn1.z()) / (n.x() + n.y() + n.z());
+            // Solve t1 . n = tn1
+            FT t1 = scalar_product(tn1, n) / n_sqr;
             // FT t1 = tn1.x() / n.x();
 
             return std::make_pair(t0, t1);
@@ -134,7 +141,8 @@ class Parametric_line_traits_3 {
         FT operator()(const Parametric_line_3 &l, const Point_3 &p) const {
             // l.p() + t * l.d() = p
             auto v = K().construct_vector_3_object()(l.p(), p);
-            return (v.x() + v.y() + v.z()) / (l.d().x() + l.d().y() + l.d().z());
+            // TODO: robustness, e.g. if l.d() is zero
+            return scalar_product(v, l.d()) / l.d().squared_length();
         }
     };
 
