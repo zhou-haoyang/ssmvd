@@ -922,6 +922,7 @@ class SSM_voronoi_diagram {
 
                 return Next_interval_info{Cone_descriptor(k_cur.site(), next_edge), ts, type};
             }
+            return std::nullopt;
         };
 
         if (prev_type == CW || prev_type == UNKNOWN) {
