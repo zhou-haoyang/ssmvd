@@ -559,13 +559,13 @@ class SSM_restricted_voronoi_diagram {
                                    CGAL_assertion(is_boundary_edge(hd0) && is_boundary_edge(hd1));
                                },
                                [&](const Boundary_bisector_info &info) {
-                                   CGAL_assertion(degree(vd, graph) == 4);
+                                   CGAL_assertion(degree(vd, graph) == 4 || degree(vd, graph) == 3);
                                    int n_boundary = 0, n_bisector = 0;
                                    for (auto hd : halfedges_around_target(vd, graph)) {
                                        if (is_bisector_edge(hd)) ++n_bisector;
                                        if (is_boundary_edge(hd)) ++n_boundary;
                                    }
-                                   CGAL_assertion(n_boundary == 2 && n_bisector == 2);
+                                   CGAL_assertion(n_boundary == 2 && (n_bisector == 2 || n_bisector == 1));
                                },
                                [&](const Two_site_bisector_info &info) {
                                    CGAL_assertion(degree(vd, graph) == 2);
@@ -581,8 +581,8 @@ class SSM_restricted_voronoi_diagram {
                                },
                            },
                            get(vertex_info_map, vd));
-                return true;
             }
+                return true;
         }
 
         index_t cell_site(vd_face_descriptor fd) const {
@@ -996,7 +996,7 @@ class SSM_restricted_voronoi_diagram {
                         bool add_cone_vertices = false, vd_face_descriptor fd0 = vd_graph_traits::null_face(),
                         vd_face_descriptor fd1 = vd_graph_traits::null_face(), FT t_min = 0, FT t_max = 1) {
         CGAL_precondition(k0.is_valid());
-        CGAL_precondition(t_max > t_min);
+        CGAL_precondition(t_max >= t_min);
 
         vout << IO::level(1) << SOURCE_LOC << ": tracing boundary " << bh << " with cone " << cone_index(k0)
              << std::endl;
@@ -1242,7 +1242,7 @@ class SSM_restricted_voronoi_diagram {
     // }
 
     void trace_all_boundaries(mesh_vertex_descriptor vd, bool add_mesh_vertices = true, bool add_boundary_edges = true,
-                              bool add_cone_vertices = false) {
+                              bool add_cone_vertices = false, bool multi_thread = true) {
         b_trace_timer.start();
 
         using vd_vertex_t = CGAL::dynamic_vertex_property_t<vd_vertex_descriptor>;
@@ -1303,7 +1303,10 @@ class SSM_restricted_voronoi_diagram {
 
                 for (auto hd_inner : halfedges_around_source(target(hd, mesh), mesh)) {
                     // if (get(edge_visited, edge(hd_inner, mesh))) continue;
-                    pool.detach_task(std::bind(trace, hd_inner, k));
+                    if (multi_thread)
+                        pool.detach_task(std::bind(trace, hd_inner, k));
+                    else
+                        trace(hd_inner, k);
                 }
             } catch (...) {
                 std::lock_guard lock(exception_mutex);
@@ -1312,7 +1315,10 @@ class SSM_restricted_voronoi_diagram {
         };
 
         for (auto hd : halfedges_around_source(vd, mesh)) {
-            pool.detach_task(std::bind(trace, hd, k0));
+            if (multi_thread)
+                pool.detach_task(std::bind(trace, hd, k0));
+            else
+                trace(hd, k0);
         }
 
         // wait for all tasks to finish
@@ -1323,9 +1329,10 @@ class SSM_restricted_voronoi_diagram {
     }
 
     void trace_all_boundaries(bool add_mesh_vertices = true, bool add_boundary_edges = true,
-                              bool add_cone_vertices = false) {
+                              bool add_cone_vertices = false, bool multi_thread = true) {
         if (is_empty(mesh)) return;
-        trace_all_boundaries(*vertices(mesh).first, add_mesh_vertices, add_boundary_edges, add_cone_vertices);
+        trace_all_boundaries(*vertices(mesh).first, add_mesh_vertices, add_boundary_edges, add_cone_vertices,
+                             multi_thread);
     }
 
     void reload() { vpm = get(vertex_point, mesh); }
@@ -1373,6 +1380,8 @@ class SSM_restricted_voronoi_diagram {
         i_traces.clear();
         i_trace_timer.stop();
     }
+
+    void process_i_traces_single_thread() { while (step()); }
 
     void build(bool add_mesh_vertices = true, bool add_boundary_edges = true, bool add_cone_vertices = false) {
         reset();
@@ -1456,13 +1465,18 @@ class SSM_restricted_voronoi_diagram {
         }
     }
 
-    void remove_disconnected_components(const auto &cmap) {
+    void remove_disconnected_components(const auto &cmap, bool single_thread = false) {
         scan_disconnected_components(cmap, m_disconnected_components_cache);
 
         dummy_face = add_face(voronoi->graph);
         for (auto &comp : m_disconnected_components_cache) {
             add_traces(comp);
-            process_i_traces();
+            if (single_thread) {
+                process_i_traces_single_thread();
+            } else {
+                process_i_traces();
+            }
+            // process_i_traces();
         }
 
         for (auto &comp : m_disconnected_components_cache) {
@@ -2105,6 +2119,7 @@ class SSM_restricted_voronoi_diagram {
     }
 
     void add_traces(const Disconnected_component &comp) {
+        b_trace_timer.start();
         disable_all_sites();
         enable_sites(comp.neighbor_sites.cbegin(), comp.neighbor_sites.cend());
         bounding_vertices.clear();
@@ -2145,6 +2160,7 @@ class SSM_restricted_voronoi_diagram {
         for (auto hd : comp.trace_inward_edges) {
             add_itrace_from_voronoi_edge(hd);
         }
+        b_trace_timer.stop();
     }
 
     void add_itrace_from_voronoi_edge(vd_halfedge_descriptor hd) {
