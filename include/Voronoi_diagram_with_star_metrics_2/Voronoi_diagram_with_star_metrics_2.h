@@ -1,5 +1,5 @@
-#ifndef SSM_VORONOI_DIAGRAM_SSM_VORONOI_DIAGRAM_H
-#define SSM_VORONOI_DIAGRAM_SSM_VORONOI_DIAGRAM_H
+#ifndef VORONOI_DIAGRAM_WITH_STAR_METRICS_2_VORONOI_DIAGRAM_WITH_STAR_METRICS_2_H
+#define VORONOI_DIAGRAM_WITH_STAR_METRICS_2_VORONOI_DIAGRAM_WITH_STAR_METRICS_2_H
 
 #include <Utils/Graph_helper.h>
 #include <Utils/Overloaded.h>
@@ -39,9 +39,9 @@
         m_##name = std::move(name); \
     }
 
-namespace CGAL::SSM_voronoi_diagram {
+namespace CGAL::Voronoi_diagram_with_star_metrics_2 {
 template <class Traits, class VoronoiDiagramVertexPointPMap = Default, class VoronoiDiagramVertexIndexPMap = Default>
-class SSM_voronoi_diagram {
+class Voronoi_diagram_with_star_metrics_2 {
 #pragma region public types
    public:
     using FT = typename Traits::FT;
@@ -471,7 +471,7 @@ class SSM_voronoi_diagram {
 
 #pragma region public methods
    public:
-    SSM_voronoi_diagram(const Polygon_2& boundary, Traits traits = {})
+    Voronoi_diagram_with_star_metrics_2(const Polygon_2& boundary, Traits traits = {})
         : m_boundary(boundary), m_traits(std::move(traits)) {
         reset();
     }
@@ -1225,5 +1225,5 @@ class SSM_voronoi_diagram {
     }
 };
 #pragma endregion
-}  // namespace CGAL::SSM_voronoi_diagram
-#endif  // SSM_VORONOI_DIAGRAM_SSM_VORONOI_DIAGRAM_H
+}  // namespace CGAL::Voronoi_diagram_with_star_metrics_2
+#endif  // VORONOI_DIAGRAM_WITH_STAR_METRICS_2_VORONOI_DIAGRAM_WITH_STAR_METRICS_2_H

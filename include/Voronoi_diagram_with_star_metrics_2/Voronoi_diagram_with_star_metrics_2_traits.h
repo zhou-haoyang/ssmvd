@@ -1,13 +1,13 @@
-#ifndef SSM_VORONOI_DIAGRAM_SSM_VORONOI_DIAGRAM_TRAITS_H
-#define SSM_VORONOI_DIAGRAM_SSM_VORONOI_DIAGRAM_TRAITS_H
+#ifndef VORONOI_DIAGRAM_WITH_STAR_METRICS_2_VORONOI_DIAGRAM_WITH_STAR_METRICS_2_TRAITS_H
+#define VORONOI_DIAGRAM_WITH_STAR_METRICS_2_VORONOI_DIAGRAM_WITH_STAR_METRICS_2_TRAITS_H
 
 #include <Parametric_line/Parametric_line_2.h>
 
 #include <CGAL/Polygon_2.h>
 
-namespace CGAL::SSM_voronoi_diagram {
+namespace CGAL::Voronoi_diagram_with_star_metrics_2 {
 template <class K, class VoronoiDiagram, class MetricTraits>
-class SSM_voronoi_diagram_traits : public K, public Parametric_line_traits_2<K>, public MetricTraits {
+class Voronoi_diagram_with_star_metrics_2_traits : public K, public Parametric_line_traits_2<K>, public MetricTraits {
    public:
     using Kernel = K;
     using FT = typename Kernel::FT;
@@ -29,6 +29,6 @@ class SSM_voronoi_diagram_traits : public K, public Parametric_line_traits_2<K>,
     using Parametric_line_traits::construct_vector_2_object;
     using Parametric_line_traits::intersect_2_object;
 };
-}  // namespace CGAL::SSM_voronoi_diagram
+}  // namespace CGAL::Voronoi_diagram_with_star_metrics_2
 
-#endif  // SSM_VORONOI_DIAGRAM_SSM_VORONOI_DIAGRAM_TRAITS_H
+#endif  // VORONOI_DIAGRAM_WITH_STAR_METRICS_2_VORONOI_DIAGRAM_WITH_STAR_METRICS_2_TRAITS_H

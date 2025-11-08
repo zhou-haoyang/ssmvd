@@ -1,7 +1,7 @@
-#ifndef SSM_VORONOI_DIAGRAM_POLYGON_METRIC_TRAITS_H
-#define SSM_VORONOI_DIAGRAM_POLYGON_METRIC_TRAITS_H
+#ifndef VORONOI_DIAGRAM_WITH_STAR_METRICS_2_POLYGON_METRIC_TRAITS_H
+#define VORONOI_DIAGRAM_WITH_STAR_METRICS_2_POLYGON_METRIC_TRAITS_H
 
-#include <SSM_voronoi_diagram/Polygon_2_vertex_pair_circulator.h>
+#include <Voronoi_diagram_with_star_metrics_2/Polygon_2_vertex_pair_circulator.h>
 
 #include <CGAL/Origin.h>
 #include <CGAL/Polygon_2.h>
@@ -9,7 +9,7 @@
 #include <optional>
 #include <utility>
 
-namespace CGAL::SSM_voronoi_diagram {
+namespace CGAL::Voronoi_diagram_with_star_metrics_2 {
 template <class K>
 class Polygon_metric_traits {
    public:
@@ -63,6 +63,6 @@ class Polygon_metric_traits {
 
     auto metric_any_intersected_edge_object() const { return Metric_any_intersected_edge(); }
 };
-}  // namespace CGAL::SSM_voronoi_diagram
+}  // namespace CGAL::Voronoi_diagram_with_star_metrics_2
 
-#endif  // SSM_VORONOI_DIAGRAM_POLYGON_METRIC_TRAITS_H
+#endif  // VORONOI_DIAGRAM_WITH_STAR_METRICS_2_POLYGON_METRIC_TRAITS_H

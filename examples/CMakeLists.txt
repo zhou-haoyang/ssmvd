@@ -14,4 +14,4 @@ macro(package_add_example NAME)
 endmacro()
 
 add_subdirectory(SSM_restricted_voronoi_diagram)
-add_subdirectory(SSM_voronoi_diagram)
+add_subdirectory(Voronoi_diagram_with_star_metrics_2)

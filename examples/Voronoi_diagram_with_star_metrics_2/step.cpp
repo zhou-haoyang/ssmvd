@@ -5,8 +5,8 @@
 #include <CGAL/Surface_mesh/Surface_mesh.h>
 #include <CGAL/boost/graph/copy_face_graph.h>
 #include <CGAL/boost/graph/helpers.h>
-#include <SSM_voronoi_diagram.h>
-#include <SSM_voronoi_diagram/Polygon_metric_traits.h>
+#include <Voronoi_diagram_with_star_metrics_2.h>
+#include <Voronoi_diagram_with_star_metrics_2/Polygon_metric_traits.h>
 
 #include <CGAL/Simple_cartesian.h>
 #include <CGAL/Polygon_2.h>
@@ -26,7 +26,7 @@
 #include <boost/property_map/property_map.hpp>
 #include <vector>
 
-namespace VD = CGAL::SSM_voronoi_diagram;
+namespace VD = CGAL::Voronoi_diagram_with_star_metrics_2;
 
 typedef CGAL::Simple_cartesian<double> Kernel;
 using GT = typename CGAL::Projection_traits_xy_3<Kernel>;
@@ -35,8 +35,8 @@ typedef CGAL::Surface_mesh<Kernel::Point_2> Voronoi_diagram;
 typedef CGAL::Surface_mesh<Kernel::Point_3> Voronoi_diagram_3;
 
 typedef VD::Polygon_metric_traits<Kernel> Metric_traits;
-typedef VD::SSM_voronoi_diagram_traits<Kernel, Voronoi_diagram, Metric_traits> Traits;
-typedef VD::SSM_voronoi_diagram<Traits> SSM_voronoi_diagram;
+typedef VD::Voronoi_diagram_with_star_metrics_2_traits<Kernel, Voronoi_diagram, Metric_traits> Traits;
+typedef VD::Voronoi_diagram_with_star_metrics_2<Traits> Voronoi_diagram_with_star_metrics_2;
 using Point_2 = typename Kernel::Point_2;
 using Point_3 = typename Kernel::Point_3;
 using Polygon_2 = CGAL::Polygon_2<Kernel>;
@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
     boundary.push_back(Point_2(1, 1));
     boundary.push_back(Point_2(-1, 1));
 
-    SSM_voronoi_diagram ssm_vd(boundary);
+    Voronoi_diagram_with_star_metrics_2 ssm_vd(boundary);
 
     Polygon_2 metric;
     metric.push_back(Point_2(0, -1));

@@ -12,8 +12,8 @@ include(GoogleTest)
 
 add_executable(
     ssm_test
-    SSM_voronoi_diagram/Simple_cartesian_find_intervals.cpp
-    SSM_voronoi_diagram/Simple_cartesian_random.cpp
+    Voronoi_diagram_with_star_metrics_2/Simple_cartesian_find_intervals.cpp
+    Voronoi_diagram_with_star_metrics_2/Simple_cartesian_random.cpp
 )
 
 # link the Google test infrastructure, mocking library, and a default main function to

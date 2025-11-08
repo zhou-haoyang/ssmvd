@@ -1,6 +1,6 @@
 #include <CGAL/Surface_mesh/Surface_mesh.h>
-#include <SSM_voronoi_diagram.h>
-#include <SSM_voronoi_diagram/Polygon_metric_traits.h>
+#include <Voronoi_diagram_with_star_metrics_2.h>
+#include <Voronoi_diagram_with_star_metrics_2/Polygon_metric_traits.h>
 
 #include <CGAL/Simple_cartesian.h>
 #include <CGAL/Polygon_2.h>
@@ -10,18 +10,18 @@
 #include <algorithm>
 #include <vector>
 
-namespace VD = CGAL::SSM_voronoi_diagram;
+namespace VD = CGAL::Voronoi_diagram_with_star_metrics_2;
 
 typedef CGAL::Simple_cartesian<double> Kernel;
 
 using FT = typename Kernel::FT;
 typedef CGAL::Surface_mesh<Kernel::Point_2> Voronoi_diagram;
 typedef VD::Polygon_metric_traits<Kernel> Metric_traits;
-typedef VD::SSM_voronoi_diagram_traits<Kernel, Voronoi_diagram, Metric_traits> Traits;
-typedef VD::SSM_voronoi_diagram<Traits> SSM_voronoi_diagram;
+typedef VD::Voronoi_diagram_with_star_metrics_2_traits<Kernel, Voronoi_diagram, Metric_traits> Traits;
+typedef VD::Voronoi_diagram_with_star_metrics_2<Traits> Voronoi_diagram_with_star_metrics_2;
 using Point_2 = typename Kernel::Point_2;
 using Polygon_2 = CGAL::Polygon_2<Kernel>;
-using Metric_iterator = typename SSM_voronoi_diagram::Metric_iterator;
+using Metric_iterator = typename Voronoi_diagram_with_star_metrics_2::Metric_iterator;
 typedef CGAL::Creator_uniform_2<double, Point_2> Creator;
 
 void make_rect(Polygon_2 &p) {
@@ -45,7 +45,7 @@ void test_b_trace(FT a, size_t n, size_t n_sites) {
     Polygon_2 boundary;
     make_rect(boundary);
 
-    SSM_voronoi_diagram vd(boundary);
+    Voronoi_diagram_with_star_metrics_2 vd(boundary);
 
     Polygon_2 metric;
     make_cross(metric);
@@ -74,7 +74,7 @@ void test_build(FT a, size_t n, size_t n_sites) {
     Polygon_2 boundary;
     make_rect(boundary);
 
-    SSM_voronoi_diagram vd(boundary);
+    Voronoi_diagram_with_star_metrics_2 vd(boundary);
 
     Polygon_2 metric;
     make_cross(metric);
