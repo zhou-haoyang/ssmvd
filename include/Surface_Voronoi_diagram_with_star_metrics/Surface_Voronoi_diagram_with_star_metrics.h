@@ -1,9 +1,9 @@
-#ifndef SSM_RESTRICTED_VORONOI_DIAGRAM_SSM_RESTRICTED_VORONOI_DIAGRAM_H
-#define SSM_RESTRICTED_VORONOI_DIAGRAM_SSM_RESTRICTED_VORONOI_DIAGRAM_H
+#ifndef SURFACE_VORONOI_DIAGRAM_WITH_STAR_METRICS_SURFACE_VORONOI_DIAGRAM_WITH_STAR_METRICS_H
+#define SURFACE_VORONOI_DIAGRAM_WITH_STAR_METRICS_SURFACE_VORONOI_DIAGRAM_WITH_STAR_METRICS_H
 
 #include <CGAL/Polygon_mesh_processing/measure.h>
 #include <CGAL/tss.h>
-#include <SSM_restricted_voronoi_diagram/SSM_restricted_voronoi_diagram_traits.h>
+#include <Surface_Voronoi_diagram_with_star_metrics/Surface_Voronoi_diagram_with_star_metrics_traits.h>
 #include <IO/Verbosity_level_ostream.h>
 #include <Parametric_line/Parametric_line_3.h>
 #include <Utils/Graph_helper.h>
@@ -52,13 +52,13 @@
 #define SOURCE_LOC __func__ << " (" << __LINE__ << ")"
 
 namespace CGAL {
-namespace SSM_restricted_voronoi_diagram {
+namespace Surface_Voronoi_diagram_with_star_metrics {
 namespace PMP = Polygon_mesh_processing;
 
 template <class Traits, class MeshVertexPointPMap = Default, class MeshFaceIndexPMap = Default,
           class MeshEdgeIndexPMap = Default, class MetricVertexPointPMap = Default, class MetricFaceIndexPMap = Default,
           class VoronoiDiagramVertexPointPMap = Default, class VoronoiDiagramVertexIndexPMap = Default>
-class SSM_restricted_voronoi_diagram {
+class Surface_Voronoi_diagram_with_star_metrics {
    public:
 #pragma region PublicTypes
 
@@ -801,7 +801,7 @@ class SSM_restricted_voronoi_diagram {
 
 #pragma region PublicInterface
    public:
-    SSM_restricted_voronoi_diagram(const Surface_mesh &mesh, Mesh_vertex_point_pmap vpm,
+    Surface_Voronoi_diagram_with_star_metrics(const Surface_mesh &mesh, Mesh_vertex_point_pmap vpm,
                                    Mesh_face_index_pmap face_index_map, Mesh_edge_index_pmap edge_index_map,
                                    std::size_t num_threads = std::thread::hardware_concurrency(),
                                    Traits traits = Traits())
@@ -814,10 +814,10 @@ class SSM_restricted_voronoi_diagram {
         reset();
     }
 
-    SSM_restricted_voronoi_diagram(const Surface_mesh &mesh,
+    Surface_Voronoi_diagram_with_star_metrics(const Surface_mesh &mesh,
                                    std::size_t num_threads = std::thread::hardware_concurrency(),
                                    Traits traits = Traits())
-        : SSM_restricted_voronoi_diagram(mesh, get(vertex_point, mesh), get(face_index, mesh), get(edge_index, mesh),
+        : Surface_Voronoi_diagram_with_star_metrics(mesh, get(vertex_point, mesh), get(face_index, mesh), get(edge_index, mesh),
                                          num_threads, traits) {}
 
     void add_site(const Point_3 &p, index_t metric_idx) { m_sites.push_back({p, metric_idx}); }
@@ -2233,7 +2233,7 @@ class SSM_restricted_voronoi_diagram {
 
 #pragma endregion
 };
-}  // namespace SSM_restricted_voronoi_diagram
+}  // namespace Surface_Voronoi_diagram_with_star_metrics
 }  // namespace CGAL
 
-#endif  // SSM_RESTRICTED_VORONOI_DIAGRAM_SSM_RESTRICTED_VORONOI_DIAGRAM_H
+#endif  // SURFACE_VORONOI_DIAGRAM_WITH_STAR_METRICS_SURFACE_VORONOI_DIAGRAM_WITH_STAR_METRICS_H

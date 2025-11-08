@@ -25,7 +25,7 @@
 
 #include <format>
 #include <istream>
-#include <SSM_restricted_voronoi_diagram.h>
+#include <Surface_Voronoi_diagram_with_star_metrics.h>
 
 #include <Eigen/Dense>
 
@@ -44,8 +44,8 @@
 #include <iostream>
 #include <unordered_map>
 #include <vector>
-#include "SSM_restricted_voronoi_diagram/AABB_metric_traits.h"
-#include "SSM_restricted_voronoi_diagram/Triangle_mesh_metric_traits.h"
+#include "Surface_Voronoi_diagram_with_star_metrics/AABB_metric_traits.h"
+#include "Surface_Voronoi_diagram_with_star_metrics/Triangle_mesh_metric_traits.h"
 
 typedef CGAL::Simple_cartesian<double> Kernel;
 typedef Kernel::FT FT;
@@ -66,7 +66,7 @@ typedef CGAL::Seam_mesh<Surface_mesh, Seam_edge_pmap, Seam_vertex_pmap> Seam_mes
 // typedef CGAL::Polyhedron_3<Kernel, CGAL::Polyhedron_items_with_id_3> Metric_polyhedron;
 typedef CGAL::Surface_mesh<Kernel::Point_3> Metric_polyhedron;
 typedef CGAL::Surface_mesh<Kernel::Point_3> Voronoi_diagram;
-namespace RVD = CGAL::SSM_restricted_voronoi_diagram;
+namespace RVD = CGAL::Surface_Voronoi_diagram_with_star_metrics;
 
 typedef CGAL::AABB_face_graph_triangle_primitive<Metric_polyhedron> Primitive;
 typedef CGAL::AABB_traits_3<Kernel, Primitive> AABB_traits;
@@ -74,10 +74,10 @@ typedef CGAL::AABB_tree<AABB_traits> Tree;
 
 // typedef RVD::AABB_metric_traits<Kernel, Tree> Metric_traits;
 typedef RVD::Triangle_mesh_metric_traits<Kernel, Metric_polyhedron> Metric_traits;
-typedef RVD::SSM_restricted_voronoi_diagram_traits<Kernel, Surface_mesh, Metric_polyhedron, Voronoi_diagram,
+typedef RVD::Surface_Voronoi_diagram_with_star_metrics_traits<Kernel, Surface_mesh, Metric_polyhedron, Voronoi_diagram,
                                                    Metric_traits>
     Traits;
-typedef RVD::SSM_restricted_voronoi_diagram<Traits> Restricted_voronoi_diagram;
+typedef RVD::Surface_Voronoi_diagram_with_star_metrics<Traits> Restricted_voronoi_diagram;
 typedef Restricted_voronoi_diagram::Cone_descriptor Cone_descriptor;
 typedef boost::graph_traits<Seam_mesh> Graph_traits;
 // typedef Graph_traits::vertex_iterator vertex_iterator;

@@ -1,0 +1,7 @@
+#ifndef SURFACE_VORONOI_DIAGRAM_WITH_STAR_METRICS_H
+#define SURFACE_VORONOI_DIAGRAM_WITH_STAR_METRICS_H
+
+#include <Surface_Voronoi_diagram_with_star_metrics/Surface_Voronoi_diagram_with_star_metrics_traits.h>
+#include <Surface_Voronoi_diagram_with_star_metrics/Surface_Voronoi_diagram_with_star_metrics.h>
+
+#endif  // SURFACE_VORONOI_DIAGRAM_WITH_STAR_METRICS_H

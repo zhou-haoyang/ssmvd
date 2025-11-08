@@ -9,9 +9,9 @@
 #include <CGAL/AABB_traits_3.h>
 #include <CGAL/AABB_face_graph_triangle_primitive.h>
 
-#include <SSM_restricted_voronoi_diagram/Triangle_mesh_metric_traits.h>
-#include <SSM_restricted_voronoi_diagram/AABB_metric_traits.h>
-#include <SSM_restricted_voronoi_diagram.h>
+#include <Surface_Voronoi_diagram_with_star_metrics/Triangle_mesh_metric_traits.h>
+#include <Surface_Voronoi_diagram_with_star_metrics/AABB_metric_traits.h>
+#include <Surface_Voronoi_diagram_with_star_metrics.h>
 
 #include <CGAL/Point_set_3.h>
 #include <CGAL/Graphics_scene_options.h>
@@ -21,7 +21,7 @@
 
 #include <iostream>
 
-namespace RVD = CGAL::SSM_restricted_voronoi_diagram;
+namespace RVD = CGAL::Surface_Voronoi_diagram_with_star_metrics;
 
 typedef CGAL::Simple_cartesian<double> Kernel;
 typedef Kernel::Point_3 Point_3;
@@ -36,11 +36,11 @@ typedef CGAL::AABB_tree<AABB_traits> Tree;
 
 typedef RVD::AABB_metric_traits<Kernel, Tree> Metric_traits;
 // typedef RVD::Triangle_mesh_metric_traits<Kernel, Metric_polyhedron> Metric_traits;
-typedef RVD::SSM_restricted_voronoi_diagram_traits<Kernel, Surface_mesh, Metric_polyhedron, Voronoi_diagram,
+typedef RVD::Surface_Voronoi_diagram_with_star_metrics_traits<Kernel, Surface_mesh, Metric_polyhedron, Voronoi_diagram,
                                                    Metric_traits>
     Traits;
-typedef RVD::SSM_restricted_voronoi_diagram<Traits> SSM_restricted_voronoi_diagram;
-typedef SSM_restricted_voronoi_diagram::Voronoi_diagram_data Voronoi_diagram_data;
+typedef RVD::Surface_Voronoi_diagram_with_star_metrics<Traits> Surface_Voronoi_diagram_with_star_metrics;
+typedef Surface_Voronoi_diagram_with_star_metrics::Voronoi_diagram_data Voronoi_diagram_data;
 
 using PS3 = typename CGAL::Point_set_3<Point_3>;
 
@@ -82,7 +82,7 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    SSM_restricted_voronoi_diagram ssm_vd(sm);
+    Surface_Voronoi_diagram_with_star_metrics ssm_vd(sm);
 
     std::ifstream is(site_file);
     if (!ssm_vd.read_sites(is)) {

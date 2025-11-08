@@ -13,5 +13,5 @@ macro(package_add_example NAME)
     set_target_properties(${NAME} PROPERTIES FOLDER examples)
 endmacro()
 
-add_subdirectory(SSM_restricted_voronoi_diagram)
+add_subdirectory(Surface_Voronoi_diagram_with_star_metrics)
 add_subdirectory(Voronoi_diagram_with_star_metrics_2)

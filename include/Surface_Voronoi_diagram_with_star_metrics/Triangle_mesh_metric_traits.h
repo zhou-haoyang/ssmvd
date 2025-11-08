@@ -1,12 +1,12 @@
-#ifndef SSM_RESTRICTED_VORONOI_DIAGRAM_TRIANGLE_MESH_METRIC_TRAITS_H
-#define SSM_RESTRICTED_VORONOI_DIAGRAM_TRIANGLE_MESH_METRIC_TRAITS_H
+#ifndef SURFACE_VORONOI_DIAGRAM_WITH_STAR_METRICS_TRIANGLE_MESH_METRIC_TRAITS_H
+#define SURFACE_VORONOI_DIAGRAM_WITH_STAR_METRICS_TRIANGLE_MESH_METRIC_TRAITS_H
 
 #include <CGAL/Origin.h>
 #include <CGAL/boost/graph/properties.h>
 #include <boost/graph/graph_traits.hpp>
 #include <optional>
 
-namespace CGAL::SSM_restricted_voronoi_diagram {
+namespace CGAL::Surface_Voronoi_diagram_with_star_metrics {
 template <class K, class G>
 class Triangle_mesh_metric_traits {
    public:
@@ -74,5 +74,5 @@ class Triangle_mesh_metric_traits {
     auto metric_any_intersection_object() const { return Metric_any_intersection(); }
     auto metric_any_intersected_face_object() const { return Metric_any_intersected_face(); }
 };
-}  // namespace CGAL::SSM_restricted_voronoi_diagram
-#endif  // SSM_RESTRICTED_VORONOI_DIAGRAM_TRIANGLE_MESH_METRIC_TRAITS_H
+}  // namespace CGAL::Surface_Voronoi_diagram_with_star_metrics
+#endif  // SURFACE_VORONOI_DIAGRAM_WITH_STAR_METRICS_TRIANGLE_MESH_METRIC_TRAITS_H

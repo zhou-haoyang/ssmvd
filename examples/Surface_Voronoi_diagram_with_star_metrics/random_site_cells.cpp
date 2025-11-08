@@ -12,9 +12,9 @@
 #include <CGAL/AABB_face_graph_triangle_primitive.h>
 
 #include <CGAL/point_generators_3.h>
-#include <SSM_restricted_voronoi_diagram/Triangle_mesh_metric_traits.h>
-#include <SSM_restricted_voronoi_diagram/AABB_metric_traits.h>
-#include <SSM_restricted_voronoi_diagram.h>
+#include <Surface_Voronoi_diagram_with_star_metrics/Triangle_mesh_metric_traits.h>
+#include <Surface_Voronoi_diagram_with_star_metrics/AABB_metric_traits.h>
+#include <Surface_Voronoi_diagram_with_star_metrics.h>
 
 #include <CGAL/Point_set_3.h>
 #include <CGAL/Graphics_scene_options.h>
@@ -25,7 +25,7 @@
 #include <iostream>
 #include <variant>
 
-namespace RVD = CGAL::SSM_restricted_voronoi_diagram;
+namespace RVD = CGAL::Surface_Voronoi_diagram_with_star_metrics;
 
 typedef CGAL::Simple_cartesian<double> Kernel;
 typedef Kernel::Point_3 Point_3;
@@ -40,11 +40,11 @@ typedef CGAL::AABB_tree<AABB_traits> Tree;
 
 typedef RVD::AABB_metric_traits<Kernel, Tree> Metric_traits;
 // typedef RVD::Triangle_mesh_metric_traits<Kernel, Metric_polyhedron> Metric_traits;
-typedef RVD::SSM_restricted_voronoi_diagram_traits<Kernel, Surface_mesh, Metric_polyhedron, Voronoi_diagram,
+typedef RVD::Surface_Voronoi_diagram_with_star_metrics_traits<Kernel, Surface_mesh, Metric_polyhedron, Voronoi_diagram,
                                                    Metric_traits>
     Traits;
-typedef RVD::SSM_restricted_voronoi_diagram<Traits> SSM_restricted_voronoi_diagram;
-typedef SSM_restricted_voronoi_diagram::Voronoi_diagram_data Voronoi_diagram_data;
+typedef RVD::Surface_Voronoi_diagram_with_star_metrics<Traits> Surface_Voronoi_diagram_with_star_metrics;
+typedef Surface_Voronoi_diagram_with_star_metrics::Voronoi_diagram_data Voronoi_diagram_data;
 
 using PS3 = typename CGAL::Point_set_3<Point_3>;
 
@@ -52,7 +52,7 @@ using vd_graph_traits = typename boost::graph_traits<Voronoi_diagram>;
 using vd_vertex_descriptor = typename vd_graph_traits::vertex_descriptor;
 using vd_edge_descriptor = typename vd_graph_traits::edge_descriptor;
 using vd_face_descriptor = typename vd_graph_traits::face_descriptor;
-using Voronoi_diagram_data = SSM_restricted_voronoi_diagram::Voronoi_diagram_data;
+using Voronoi_diagram_data = Surface_Voronoi_diagram_with_star_metrics::Voronoi_diagram_data;
 
 struct Graphics_scene_options_sites
     : public CGAL::Graphics_scene_options<PS3, typename PS3::const_iterator, typename PS3::const_iterator,
@@ -102,7 +102,7 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    SSM_restricted_voronoi_diagram ssm_vd(sm);
+    Surface_Voronoi_diagram_with_star_metrics ssm_vd(sm);
 
     Metric_polyhedron mp;
     CGAL::make_tetrahedron(Point_3(-1, -1, -1), Point_3(1, 1, -1), Point_3(-1, 1, 1), Point_3(1, -1, 1), mp);

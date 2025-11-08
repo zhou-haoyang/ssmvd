@@ -1,12 +1,12 @@
-#ifndef SSM_RESTRICTED_VORONOI_DIAGRAM_SSM_RESTRICTED_VORONOI_DIAGRAM_TRAITS_H
-#define SSM_RESTRICTED_VORONOI_DIAGRAM_SSM_RESTRICTED_VORONOI_DIAGRAM_TRAITS_H
+#ifndef SURFACE_VORONOI_DIAGRAM_WITH_STAR_METRICS_SURFACE_VORONOI_DIAGRAM_WITH_STAR_METRICS_TRAITS_H
+#define SURFACE_VORONOI_DIAGRAM_WITH_STAR_METRICS_SURFACE_VORONOI_DIAGRAM_WITH_STAR_METRICS_TRAITS_H
 
 #include <Parametric_line/Parametric_line_3.h>
 #include <CGAL/Default.h>
 
-namespace CGAL::SSM_restricted_voronoi_diagram {
+namespace CGAL::Surface_Voronoi_diagram_with_star_metrics {
 template <class K, class SurfaceMesh, class MetricPolyhedron, class VoronoiDiagram, class MetricTraits>
-class SSM_restricted_voronoi_diagram_traits : public K, public Parametric_line_traits_3<K>, public MetricTraits {
+class Surface_Voronoi_diagram_with_star_metrics_traits : public K, public Parametric_line_traits_3<K>, public MetricTraits {
    public:
     using Kernel = K;
     using FT = Kernel::FT;
@@ -36,6 +36,6 @@ class SSM_restricted_voronoi_diagram_traits : public K, public Parametric_line_t
     using MetricTraits::metric_any_intersected_face_object;
     using MetricTraits::metric_any_intersection_object;
 };
-}  // namespace CGAL::SSM_restricted_voronoi_diagram
+}  // namespace CGAL::Surface_Voronoi_diagram_with_star_metrics
 
-#endif  // SSM_RESTRICTED_VORONOI_DIAGRAM_SSM_RESTRICTED_VORONOI_DIAGRAM_TRAITS_H
+#endif  // SURFACE_VORONOI_DIAGRAM_WITH_STAR_METRICS_SURFACE_VORONOI_DIAGRAM_WITH_STAR_METRICS_TRAITS_H
