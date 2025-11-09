@@ -45,7 +45,7 @@
 
 #define TRAIT_FUNC(ret_type, name, functor)                  \
     template <class... T>                                    \
-    static ret_type name(T &&...args) {                      \
+    static ret_type name(T&&... args) {                      \
         return Traits().functor()(std::forward<T>(args)...); \
     }
 
@@ -70,7 +70,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
     using Ray_3 = typename Traits::Ray_3;
     using Plane_3 = typename Traits::Plane_3;
     using Line_3 = typename Traits::Line_3;
-    using Pline_3 = typename Traits::Pline_3;
+    using Parametric_line_3 = typename Traits::Parametric_line_3;
 
     using Surface_mesh = typename Traits::Surface_mesh;
     using Metric_polyhedron = typename Traits::Metric_polyhedron;
@@ -135,22 +135,22 @@ class Surface_Voronoi_diagram_with_star_metrics {
         index_t site_idx;
         size_t face_idx;
 
-        bool operator==(const Cone_index &other) const {
+        bool operator==(const Cone_index& other) const {
             return site_idx == other.site_idx && face_idx == other.face_idx;
         }
-        bool operator>(const Cone_index &other) const {
+        bool operator>(const Cone_index& other) const {
             return site_idx > other.site_idx || (site_idx == other.site_idx && face_idx > other.face_idx);
         }
 
         // stream operator
-        friend std::ostream &operator<<(std::ostream &os, const Cone_index &ci) {
+        friend std::ostream& operator<<(std::ostream& os, const Cone_index& ci) {
             os << "Cone(S" << ci.site_idx << ", M" << ci.face_idx << ")";
             return os;
         }
     };
 
     struct Cone_index_hash {
-        std::size_t operator()(const Cone_index &k) const {
+        std::size_t operator()(const Cone_index& k) const {
             std::size_t seed = 0;
             boost::hash_combine(seed, k.site_idx);
             boost::hash_combine(seed, k.face_idx);
@@ -169,13 +169,13 @@ class Surface_Voronoi_diagram_with_star_metrics {
             if (k0 > k1) std::swap(k0, k1);
         }
 
-        bool operator==(const Internal_vertex_id &other) const {
+        bool operator==(const Internal_vertex_id& other) const {
             return k0 == other.k0 && k1 == other.k1 && k2 == other.k2 && mesh_face_idx == other.mesh_face_idx;
         }
     };
 
     struct Internal_vertex_id_hash {
-        std::size_t operator()(const Internal_vertex_id &v) const {
+        std::size_t operator()(const Internal_vertex_id& v) const {
             std::size_t seed = 0;
             boost::hash_combine(seed, Cone_index_hash{}(v.k0));
             boost::hash_combine(seed, Cone_index_hash{}(v.k1));
@@ -194,18 +194,18 @@ class Surface_Voronoi_diagram_with_star_metrics {
             if (k0 > k1) std::swap(k0, k1);
         }
 
-        bool operator==(const Boundary_vertex_id &other) const {
+        bool operator==(const Boundary_vertex_id& other) const {
             return k0 == other.k0 && k1 == other.k1 && mesh_halfedge_idx == other.mesh_halfedge_idx;
         }
 
-        friend std::ostream &operator<<(std::ostream &os, const Boundary_vertex_id &v) {
+        friend std::ostream& operator<<(std::ostream& os, const Boundary_vertex_id& v) {
             os << "Boundary(" << v.k0 << ", " << v.k1 << ", E" << v.mesh_halfedge_idx << ")";
             return os;
         }
     };
 
     struct Boundary_vertex_id_hash {
-        std::size_t operator()(const Boundary_vertex_id &v) const {
+        std::size_t operator()(const Boundary_vertex_id& v) const {
             std::size_t seed = 0;
             boost::hash_combine(seed, Cone_index_hash{}(v.k0));
             boost::hash_combine(seed, Cone_index_hash{}(v.k1));
@@ -223,18 +223,18 @@ class Surface_Voronoi_diagram_with_star_metrics {
             if (k0 > k1) std::swap(k0, k1);
         }
 
-        bool operator==(const Bisector_segment_id &other) const {
+        bool operator==(const Bisector_segment_id& other) const {
             return k0 == other.k0 && k1 == other.k1 && mesh_face_index == other.mesh_face_index;
         }
 
-        friend std::ostream &operator<<(std::ostream &os, const Bisector_segment_id &v) {
+        friend std::ostream& operator<<(std::ostream& os, const Bisector_segment_id& v) {
             os << "Bisector(" << v.k0 << ", " << v.k1 << ", F" << v.mesh_face_index << ")";
             return os;
         }
     };
 
     struct Bisector_segment_id_hash {
-        std::size_t operator()(const Bisector_segment_id &v) const {
+        std::size_t operator()(const Bisector_segment_id& v) const {
             std::size_t seed = 0;
             boost::hash_combine(seed, Cone_index_hash{}(v.k0));
             boost::hash_combine(seed, Cone_index_hash{}(v.k1));
@@ -247,7 +247,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
         index_t site_idx = -1;
         metric_face_descriptor face;
 
-        bool operator==(const Cone_descriptor &other) const { return site_idx == other.site_idx && face == other.face; }
+        bool operator==(const Cone_descriptor& other) const { return site_idx == other.site_idx && face == other.face; }
 
         bool is_valid() const { return site_idx >= 0 && face != metric_graph_traits::null_face(); }
     };
@@ -338,7 +338,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
         /**
          * @brief The copy constructor is deleted to avoid the property map ownership issue.
          */
-        Voronoi_diagram_data(const Voronoi_diagram_data &) = delete;
+        Voronoi_diagram_data(const Voronoi_diagram_data&) = delete;
 
         bool is_boundary_edge(vd_edge_descriptor ed) const {
             return std::holds_alternative<Boundary_edge_info>(get(edge_info_map, ed));
@@ -352,7 +352,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
 
         bool is_bisector_edge(vd_halfedge_descriptor hd) const { return is_bisector_edge(edge(hd, graph)); }
 
-        vd_vertex_descriptor add_vertex(const Point_3 &p, const Vertex_info &info, const Vector_3 &n = {}) {
+        vd_vertex_descriptor add_vertex(const Point_3& p, const Vertex_info& info, const Vector_3& n = {}) {
             auto vd = CGAL::add_vertex(graph);
             put(vpm, vd, p);
             // put(vertex_index_map, vd, num_vertices(graph) - 1);
@@ -440,7 +440,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
             CGAL::remove_edge(ed, graph);
         }
 
-        void flood_fill_faces(auto &map, const auto &default_value, const auto &seed_faces,
+        void flood_fill_faces(auto& map, const auto& default_value, const auto& seed_faces,
                               bool flood_through_bisector = false, bool flood_through_boundary = true) {
             std::queue<vd_face_descriptor> queue;
 
@@ -494,7 +494,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
             return std::make_pair(num_components, map);
         }
 
-        auto face_bounded_side(vd_face_descriptor fd, const Point_3 &p) const {
+        auto face_bounded_side(vd_face_descriptor fd, const Point_3& p) const {
             auto n = PMP::compute_face_normal(fd, graph);
             std::vector<Point_3> vertices;
             for (auto vd : vertices_around_face(halfedge(fd, graph), graph)) {
@@ -548,17 +548,17 @@ class Surface_Voronoi_diagram_with_star_metrics {
         bool check_topology() const {
             for (auto vd : vertices(graph)) {
                 std::visit(overloaded{
-                               [&](const Boundary_vertex_info &info) {
+                               [&](const Boundary_vertex_info& info) {
                                    for (auto hd : halfedges_around_target(vd, graph)) {
                                        CGAL_assertion(is_boundary_edge(hd));
                                    }
                                },
-                               [&](const Boundary_cone_info &info) {
+                               [&](const Boundary_cone_info& info) {
                                    CGAL_assertion(degree(vd, graph) == 2);
                                    auto hd0 = halfedge(vd, graph), hd1 = next(hd0, graph);
                                    CGAL_assertion(is_boundary_edge(hd0) && is_boundary_edge(hd1));
                                },
-                               [&](const Boundary_bisector_info &info) {
+                               [&](const Boundary_bisector_info& info) {
                                    CGAL_assertion(degree(vd, graph) == 4 || degree(vd, graph) == 3);
                                    int n_boundary = 0, n_bisector = 0;
                                    for (auto hd : halfedges_around_target(vd, graph)) {
@@ -567,12 +567,12 @@ class Surface_Voronoi_diagram_with_star_metrics {
                                    }
                                    CGAL_assertion(n_boundary == 2 && (n_bisector == 2 || n_bisector == 1));
                                },
-                               [&](const Two_site_bisector_info &info) {
+                               [&](const Two_site_bisector_info& info) {
                                    CGAL_assertion(degree(vd, graph) == 2);
                                    auto hd0 = halfedge(vd, graph), hd1 = next(hd0, graph);
                                    CGAL_assertion(is_bisector_edge(hd0) && is_bisector_edge(hd1));
                                },
-                               [&](const Three_site_bisector_info &info) {
+                               [&](const Three_site_bisector_info& info) {
                                    CGAL_assertion(degree(vd, graph) == 3);
 
                                    for (auto hd : halfedges_around_target(vd, graph)) {
@@ -582,7 +582,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
                            },
                            get(vertex_info_map, vd));
             }
-                return true;
+            return true;
         }
 
         index_t cell_site(vd_face_descriptor fd) const {
@@ -606,7 +606,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
     using Voronoi_diagram_ptr = std::shared_ptr<Voronoi_diagram_data>;
 
     struct Internal_trace {
-        Pline_3 bisect_line;
+        Parametric_line_3 bisect_line;
         Plane_3 bisect_plane, face_plane;
         mesh_halfedge_descriptor face_hd;
         mesh_halfedge_descriptor prev_hd;
@@ -625,13 +625,13 @@ class Surface_Voronoi_diagram_with_star_metrics {
         Metric_face_index_pmap face_index_map;
         Metric_traits_data data;
 
-        Metric_data(Metric_polyhedron &&graph, Metric_vertex_point_pmap &&vpm, Metric_face_index_pmap &&fim)
+        Metric_data(Metric_polyhedron&& graph, Metric_vertex_point_pmap&& vpm, Metric_face_index_pmap&& fim)
             : graph(std::move(graph)),
               vpm(std::move(vpm)),
               face_index_map(std::move(fim)),
               data(std::move(construct_metric_traits_data(this->graph))) {}
 
-        Metric_data(Metric_polyhedron &&graph)
+        Metric_data(Metric_polyhedron&& graph)
             : graph(std::move(graph)),
               vpm(std::move(get(vertex_point, this->graph))),
               face_index_map(std::move(get(face_index, this->graph))),
@@ -674,11 +674,11 @@ class Surface_Voronoi_diagram_with_star_metrics {
         using difference_type = std::ptrdiff_t;
         using iterator = Segment_cone_intersections_iterator;
 
-        Segment_cone_intersections_iterator(Segment_cone_intersections *data, std::size_t idx) : data(data), idx(idx) {}
+        Segment_cone_intersections_iterator(Segment_cone_intersections* data, std::size_t idx) : data(data), idx(idx) {}
 
         value_type operator*() const { return (*data)[idx]; }
 
-        iterator &operator++() {
+        iterator& operator++() {
             ++idx;
             return *this;
         }
@@ -689,10 +689,10 @@ class Surface_Voronoi_diagram_with_star_metrics {
             return tmp;
         }
 
-        bool operator==(const iterator &other) const { return data == other.data && idx == other.idx; }
+        bool operator==(const iterator& other) const { return data == other.data && idx == other.idx; }
 
        private:
-        Segment_cone_intersections *data = nullptr;
+        Segment_cone_intersections* data = nullptr;
         std::size_t idx;
     };
 
@@ -753,7 +753,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
             eds.push_back(hd);
         }
 
-        void clip(T tmin, T tmax, Segment_cone_intersections &res) const {
+        void clip(T tmin, T tmax, Segment_cone_intersections& res) const {
             res.clear();
 
             // Empty cases
@@ -801,10 +801,10 @@ class Surface_Voronoi_diagram_with_star_metrics {
 
 #pragma region PublicInterface
    public:
-    Surface_Voronoi_diagram_with_star_metrics(const Surface_mesh &mesh, Mesh_vertex_point_pmap vpm,
-                                   Mesh_face_index_pmap face_index_map, Mesh_edge_index_pmap edge_index_map,
-                                   std::size_t num_threads = std::thread::hardware_concurrency(),
-                                   Traits traits = Traits())
+    Surface_Voronoi_diagram_with_star_metrics(const Surface_mesh& mesh, Mesh_vertex_point_pmap vpm,
+                                              Mesh_face_index_pmap face_index_map, Mesh_edge_index_pmap edge_index_map,
+                                              std::size_t num_threads = std::thread::hardware_concurrency(),
+                                              Traits traits = Traits())
         : mesh(mesh),
           vpm(std::move(vpm)),
           face_index_map(std::move(face_index_map)),
@@ -814,13 +814,13 @@ class Surface_Voronoi_diagram_with_star_metrics {
         reset();
     }
 
-    Surface_Voronoi_diagram_with_star_metrics(const Surface_mesh &mesh,
-                                   std::size_t num_threads = std::thread::hardware_concurrency(),
-                                   Traits traits = Traits())
-        : Surface_Voronoi_diagram_with_star_metrics(mesh, get(vertex_point, mesh), get(face_index, mesh), get(edge_index, mesh),
-                                         num_threads, traits) {}
+    Surface_Voronoi_diagram_with_star_metrics(const Surface_mesh& mesh,
+                                              std::size_t num_threads = std::thread::hardware_concurrency(),
+                                              Traits traits = Traits())
+        : Surface_Voronoi_diagram_with_star_metrics(mesh, get(vertex_point, mesh), get(face_index, mesh),
+                                                    get(edge_index, mesh), num_threads, traits) {}
 
-    void add_site(const Point_3 &p, index_t metric_idx) { m_sites.push_back({p, metric_idx}); }
+    void add_site(const Point_3& p, index_t metric_idx) { m_sites.push_back({p, metric_idx}); }
 
     /**
      * @brief Add a metric attached to sites added later.
@@ -865,9 +865,9 @@ class Surface_Voronoi_diagram_with_star_metrics {
 
     auto metric_cend() const { return m_metrics.end(); }
 
-    auto &metrics() { return m_metrics; }
+    auto& metrics() { return m_metrics; }
 
-    auto &metrics() const { return m_metrics; }
+    auto& metrics() const { return m_metrics; }
 
     auto i_trace_cbegin() const { return i_traces.begin(); }
 
@@ -877,15 +877,15 @@ class Surface_Voronoi_diagram_with_star_metrics {
 
     Voronoi_diagram_ptr voronoi_diagram_ptr() { return voronoi; }
 
-    const Voronoi_diagram_data &voronoi_diagram() const { return *voronoi; }
+    const Voronoi_diagram_data& voronoi_diagram() const { return *voronoi; }
 
-    Voronoi_diagram_data &voronoi_diagram() { return *voronoi; }
+    Voronoi_diagram_data& voronoi_diagram() { return *voronoi; }
 
-    const Real_timer &i_timer() const { return i_trace_timer; }
+    const Real_timer& i_timer() const { return i_trace_timer; }
 
-    const Real_timer &b_timer() const { return b_trace_timer; }
+    const Real_timer& b_timer() const { return b_trace_timer; }
 
-    bool read_sites(std::istream &is) {
+    bool read_sites(std::istream& is) {
         std::size_t n_metrics;
         is >> n_metrics;
 
@@ -911,27 +911,27 @@ class Surface_Voronoi_diagram_with_star_metrics {
         return true;
     }
 
-    bool write_sites(std::ostream &os) const {
+    bool write_sites(std::ostream& os) const {
         os << num_metrics() << std::endl;
-        for (const auto &m : m_metrics) {
+        for (const auto& m : m_metrics) {
             if (!IO::write_OFF(os, m.graph)) return false;
         }
 
         os << num_sites() << std::endl;
-        for (const auto &s : m_sites) {
+        for (const auto& s : m_sites) {
             os << s.point.x() << " " << s.point.y() << " " << s.point.z() << " " << s.metric_idx << std::endl;
         }
 
         return true;
     }
 
-    std::pair<Site &, Metric_data &> site(index_t idx) {
-        auto &c = m_sites[idx];
+    std::pair<Site&, Metric_data&> site(index_t idx) {
+        auto& c = m_sites[idx];
         return {c, m_metrics[c.metric_idx]};
     }
 
-    std::pair<const Site &, const Metric_data &> site(index_t idx) const {
-        auto &c = m_sites[idx];
+    std::pair<const Site&, const Metric_data&> site(index_t idx) const {
+        auto& c = m_sites[idx];
         return {c, m_metrics[c.metric_idx]};
     }
 
@@ -940,13 +940,13 @@ class Surface_Voronoi_diagram_with_star_metrics {
     void enable_site(index_t idx) { m_sites[idx].enabled = true; }
 
     void disable_all_sites() {
-        for (auto &s : m_sites) {
+        for (auto& s : m_sites) {
             s.enabled = false;
         }
     }
 
     void enable_all_sites() {
-        for (auto &s : m_sites) {
+        for (auto& s : m_sites) {
             s.enabled = true;
         }
     }
@@ -963,7 +963,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
         }
     }
 
-    T find_nearest_site(const Point_3 &p, Cone_descriptor &m_cone) const {
+    T find_nearest_site(const Point_3& p, Cone_descriptor& m_cone) const {
         T d_min = INF;
 
         for (index_t i = 0; i < m_sites.size(); ++i) {
@@ -1024,7 +1024,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
         }
 
         find_all_segment_cone_intersections(b_line, t_min, t_max, isects_vec_cache);
-        auto &isects = isects_vec_cache;
+        auto& isects = isects_vec_cache;
 
         // Sub-interval of the boundary segment that intersects k0
         auto isect_iter = isects[k0.site_idx].find_face(k0.face);
@@ -1051,7 +1051,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
                 // Iterate over all intervals of k1_site that intersect current interval of k0
                 auto isect = *isect_iter;
                 isects[k1_site].clip(max(isect.second.t_min, t_min), min(isect.second.t_max, t_max), isects_cache);
-                auto &isects_overlap = isects_cache;
+                auto& isects_overlap = isects_cache;
                 for (auto [fd, isect_overlap] : isects_overlap) {
                     Cone_descriptor k1{k1_site, fd};
                     if (k1 == k_prev) continue;
@@ -1373,7 +1373,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
 
     void process_i_traces() {
         i_trace_timer.start();
-        for (auto &trace : i_traces) {
+        for (auto& trace : i_traces) {
             pool.detach_task([=, this]() { process_i_trace(trace); });
         }
         pool.wait();
@@ -1404,15 +1404,15 @@ class Surface_Voronoi_diagram_with_star_metrics {
     }
 
 #pragma region DisconnectedComponentRemoval
-    void trace_principal_components(const auto &seed_sites, const auto &seed_points, const auto &seed_mesh_faces,
-                                    auto &component_map) {
+    void trace_principal_components(const auto& seed_sites, const auto& seed_points, const auto& seed_mesh_faces,
+                                    auto& component_map) {
         std::unordered_multimap<mesh_face_descriptor, index_t> seed_face_map;
         for (index_t s = 0; s < seed_mesh_faces.size(); ++s) {
             seed_face_map.emplace(seed_mesh_faces[s], s);
         }
 
         std::vector<vd_face_descriptor> seed_faces;
-        auto &G = voronoi->graph;
+        auto& G = voronoi->graph;
         for (auto fd : faces(G)) {
             auto hd = halfedge(fd, G);
             auto mesh_fd = get(voronoi->halfedge_info_map, hd).mesh_fd;
@@ -1439,14 +1439,14 @@ class Surface_Voronoi_diagram_with_star_metrics {
         voronoi->flood_fill_faces(component_map, -1, seed_faces);
     }
 
-    Face_component_map trace_principal_components(const auto &seed_sites, const auto &seed_points,
-                                                  const auto &seed_mesh_faces) {
+    Face_component_map trace_principal_components(const auto& seed_sites, const auto& seed_points,
+                                                  const auto& seed_mesh_faces) {
         Face_component_map component_map{get(Face_component_property{}, voronoi->graph)};
         trace_principal_components(seed_sites, seed_points, seed_mesh_faces, component_map);
         return component_map;
     }
 
-    void remove_all_disconnected_components(const auto &...args) {
+    void remove_all_disconnected_components(const auto&... args) {
         auto cmap = get(Face_component_property{}, voronoi->graph);
         for (;;) {
             trace_principal_components(args..., cmap);
@@ -1465,11 +1465,11 @@ class Surface_Voronoi_diagram_with_star_metrics {
         }
     }
 
-    void remove_disconnected_components(const auto &cmap, bool single_thread = false) {
+    void remove_disconnected_components(const auto& cmap, bool single_thread = false) {
         scan_disconnected_components(cmap, m_disconnected_components_cache);
 
         dummy_face = add_face(voronoi->graph);
-        for (auto &comp : m_disconnected_components_cache) {
+        for (auto& comp : m_disconnected_components_cache) {
             add_traces(comp);
             if (single_thread) {
                 process_i_traces_single_thread();
@@ -1479,7 +1479,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
             // process_i_traces();
         }
 
-        for (auto &comp : m_disconnected_components_cache) {
+        for (auto& comp : m_disconnected_components_cache) {
             prune_bounding_vertices(comp);
         }
 
@@ -1491,7 +1491,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
     }
 
     void retrace_faces() {
-        auto &G = voronoi->graph;
+        auto& G = voronoi->graph;
         for (auto hd : halfedges(G)) {
             if (face(hd, G) != vd_graph_traits::null_face()) {
                 CGAL::set_face(hd, dummy_face, G);
@@ -1524,7 +1524,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
     std::vector<Site> m_sites;
     std::vector<Metric_data> m_metrics;
 
-    const Surface_mesh &mesh;
+    const Surface_mesh& mesh;
     Mesh_vertex_point_pmap vpm;
     Mesh_face_index_pmap face_index_map;
     Mesh_edge_index_pmap edge_index_map;
@@ -1559,35 +1559,35 @@ class Surface_Voronoi_diagram_with_star_metrics {
 #pragma endregion
 
 #pragma region PrivateMethods
-    Cone_index cone_index(const Cone_descriptor &k) const {
+    Cone_index cone_index(const Cone_descriptor& k) const {
         auto [c, m] = site(k.site_idx);
         return {k.site_idx, m.face_index_map[k.face]};
     }
 
     template <class FaceGraph, class VPMap>
-    static Plane_3 supporting_plane(typename boost::graph_traits<FaceGraph>::halfedge_descriptor hd, const FaceGraph &g,
-                                    const VPMap &vpm) {
+    static Plane_3 supporting_plane(typename boost::graph_traits<FaceGraph>::halfedge_descriptor hd, const FaceGraph& g,
+                                    const VPMap& vpm) {
         auto i0 = source(hd, g), i1 = target(hd, g), i2 = target(next(hd, g), g);
         auto v0 = get(vpm, i0), v1 = get(vpm, i1), v2 = get(vpm, i2);
         return {v0, v1, v2};
     }
 
     template <class FaceGraph, class VPMap>
-    Pline_3 edge_segment(typename boost::graph_traits<FaceGraph>::halfedge_descriptor hd, const FaceGraph &g,
-                         const VPMap &vpm) const {
+    Parametric_line_3 edge_segment(typename boost::graph_traits<FaceGraph>::halfedge_descriptor hd, const FaceGraph& g,
+                                   const VPMap& vpm) const {
         auto i0 = source(hd, g), i1 = target(hd, g);
         return construct_parametric_line(get(vpm, i0), get(vpm, i1));
     }
 
-    Pline_3 mesh_edge_segment(mesh_halfedge_descriptor hd) const { return edge_segment(hd, mesh, vpm); }
+    Parametric_line_3 mesh_edge_segment(mesh_halfedge_descriptor hd) const { return edge_segment(hd, mesh, vpm); }
 
-    Plane_3 metric_face_plane(const Metric_data &m, metric_face_descriptor fd) const {
+    Plane_3 metric_face_plane(const Metric_data& m, metric_face_descriptor fd) const {
         return supporting_plane(halfedge(fd, m.graph), m.graph, m.vpm);
     }
 
     Plane_3 mesh_face_plane(mesh_halfedge_descriptor hd) const { return supporting_plane(hd, mesh, vpm); }
 
-    Plane_3 get_bisect_plane(const Cone_descriptor &k0, const Cone_descriptor &k1) const {
+    Plane_3 get_bisect_plane(const Cone_descriptor& k0, const Cone_descriptor& k1) const {
         auto [c0, m0] = site(k0.site_idx);
         auto [c1, m1] = site(k1.site_idx);
         auto p0 = metric_face_plane(m0, k0.face);
@@ -1603,7 +1603,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
     TRAIT_FUNC(Point_3, construct_point, construct_point_3_object)
     TRAIT_FUNC(Point_3, construct_point_on, construct_point_on_3_object)
     TRAIT_FUNC(Vector_3, construct_vector, construct_vector_3_object)
-    TRAIT_FUNC(Pline_3, construct_parametric_line, construct_parametric_line_3_object)
+    TRAIT_FUNC(Parametric_line_3, construct_parametric_line, construct_parametric_line_3_object)
     TRAIT_FUNC(FT, scalar_product, compute_scalar_product_3_object)
     TRAIT_FUNC(Orientation, orientation, orientation_3_object)
     TRAIT_FUNC(auto, intersect, intersect_3_object)
@@ -1629,9 +1629,9 @@ class Surface_Voronoi_diagram_with_star_metrics {
         FT t;
     };
 
-    std::optional<Cone_intersection> find_next_cone(const Metric_data &m, metric_face_descriptor fd,
-                                                    metric_halfedge_descriptor hd_prev, const Vector_3 &p,
-                                                    const Vector_3 &d, FT tmin,
+    std::optional<Cone_intersection> find_next_cone(const Metric_data& m, metric_face_descriptor fd,
+                                                    metric_halfedge_descriptor hd_prev, const Vector_3& p,
+                                                    const Vector_3& d, FT tmin,
                                                     std::optional<FT> tmax = std::nullopt) const {
         vout << IO::level(3) << SOURCE_LOC << ": start: line=" << p << " + " << d << " * t, range=" << tmin << " - "
              << (tmax ? std::to_string(*tmax) : "inf") << std::endl;
@@ -1684,8 +1684,8 @@ class Surface_Voronoi_diagram_with_star_metrics {
         return std::nullopt;
     }
 
-    auto find_next_cone(const Cone_descriptor &k, metric_halfedge_descriptor hd_prev, const Pline_3 &l, FT tmin,
-                        std::optional<FT> tmax = std::nullopt) const {
+    auto find_next_cone(const Cone_descriptor& k, metric_halfedge_descriptor hd_prev, const Parametric_line_3& l,
+                        FT tmin, std::optional<FT> tmax = std::nullopt) const {
         auto [c, m] = site(k.site_idx);
         auto p = construct_vector(c.point, construct_point(l));
         auto d = construct_vector(l);
@@ -1701,8 +1701,8 @@ class Surface_Voronoi_diagram_with_star_metrics {
      * @param tmax
      * @param res
      */
-    void find_segment_cone_intersections(index_t site_idx, const Pline_3 &segment, FT tmin, FT tmax,
-                                         Segment_cone_intersections &res) const {
+    void find_segment_cone_intersections(index_t site_idx, const Parametric_line_3& segment, FT tmin, FT tmax,
+                                         Segment_cone_intersections& res) const {
         CGAL_precondition(tmax > tmin);
 
         auto [c, m] = site(site_idx);
@@ -1739,8 +1739,8 @@ class Surface_Voronoi_diagram_with_star_metrics {
         res.add_intersection(tmax, metric_graph_traits::null_halfedge());
     }
 
-    void find_all_segment_cone_intersections(const Pline_3 &segment, FT tmin, FT tmax,
-                                             std::vector<Segment_cone_intersections> &res) const {
+    void find_all_segment_cone_intersections(const Parametric_line_3& segment, FT tmin, FT tmax,
+                                             std::vector<Segment_cone_intersections>& res) const {
         res.resize(m_sites.size());
         for (index_t site_idx = 0; site_idx < m_sites.size(); ++site_idx) {
             if (!m_sites[site_idx].enabled) continue;
@@ -1748,7 +1748,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
         }
     }
 
-    void _process_i_trace(const Internal_trace &tr, bool immediate = true) {
+    void _process_i_trace(const Internal_trace& tr, bool immediate = true) {
         // Check if the bisector has already been traced (from another direction)
         {
             std::lock_guard lock(vd_mutex);
@@ -1763,7 +1763,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
 
         // Clip the bisector ray with the face on mesh
         mesh_halfedge_descriptor edge_hd;
-        Pline_3 edge;
+        Parametric_line_3 edge;
         {
             bool has_edge_isect = false;
             for (auto hd : halfedges_around_face(tr.face_hd, mesh)) {
@@ -1835,7 +1835,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
             }
 
             find_segment_cone_intersections(k2_site, tr.bisect_line, tmin, tmax, isects_cache);
-            auto &isects = isects_cache;
+            auto& isects = isects_cache;
             auto [c, m] = site(k2_site);
             for (auto [fd, isect_overlap] : isects) {
                 Cone_descriptor k2{k2_site, fd};
@@ -2011,7 +2011,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
         }
     }
 
-    void process_i_trace(const Internal_trace &tr, bool immediate = true) {
+    void process_i_trace(const Internal_trace& tr, bool immediate = true) {
         {
             std::lock_guard lock(exception_mutex);
             if (exception) return;
@@ -2024,10 +2024,10 @@ class Surface_Voronoi_diagram_with_star_metrics {
         }
     }
 
-    void _scan_disconnected_components(const auto &cmap, std::vector<Disconnected_component> &components,
-                                       const auto &faces) const {
+    void _scan_disconnected_components(const auto& cmap, std::vector<Disconnected_component>& components,
+                                       const auto& faces) const {
         std::unordered_set<vd_face_descriptor> visited_faces;
-        auto &G = voronoi->graph;
+        auto& G = voronoi->graph;
         for (auto fd : faces) {
             if (get(cmap, fd) != -1) continue;
 
@@ -2108,24 +2108,24 @@ class Surface_Voronoi_diagram_with_star_metrics {
         }
     }
 
-    void scan_disconnected_components(const auto &cmap, std::vector<Disconnected_component> &components) const {
+    void scan_disconnected_components(const auto& cmap, std::vector<Disconnected_component>& components) const {
         components.clear();
         _scan_disconnected_components(cmap, components, faces(voronoi->graph));
     }
 
-    void scan_disconnected_components(const auto &cmap) const {
+    void scan_disconnected_components(const auto& cmap) const {
         m_disconnected_components_cache.clear();
         _scan_disconnected_components(cmap, m_disconnected_components_cache, faces(voronoi->graph));
     }
 
-    void add_traces(const Disconnected_component &comp) {
+    void add_traces(const Disconnected_component& comp) {
         b_trace_timer.start();
         disable_all_sites();
         enable_sites(comp.neighbor_sites.cbegin(), comp.neighbor_sites.cend());
         bounding_vertices.clear();
         processed_b_verts.clear();
 
-        auto &G = voronoi->graph;
+        auto& G = voronoi->graph;
 
         for (auto ed : comp.bisector_edges) {
             voronoi->remove_edge(ed);
@@ -2164,7 +2164,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
     }
 
     void add_itrace_from_voronoi_edge(vd_halfedge_descriptor hd) {
-        auto &vg = voronoi->graph;
+        auto& vg = voronoi->graph;
 
         auto [k0, mesh_fd] = get(voronoi->halfedge_info_map, hd);
         auto [k1, _] = get(voronoi->halfedge_info_map, opposite(hd, vg));
@@ -2189,7 +2189,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
     }
 
     auto join_edges(vd_vertex_descriptor vd) {
-        auto &graph = voronoi->graph;
+        auto& graph = voronoi->graph;
         auto hd0 = halfedge(vd, graph);
         if (hd0 == vd_graph_traits::null_halfedge()) {
             return hd0;
@@ -2212,7 +2212,7 @@ class Surface_Voronoi_diagram_with_star_metrics {
         return hd_new;
     }
 
-    void prune_bounding_vertices(const Disconnected_component &comp) {
+    void prune_bounding_vertices(const Disconnected_component& comp) {
         for (auto ed : comp.boundary_edges) {
             auto hd = halfedge(ed, voronoi->graph);
             auto vs = source(hd, voronoi->graph), vt = target(hd, voronoi->graph);
