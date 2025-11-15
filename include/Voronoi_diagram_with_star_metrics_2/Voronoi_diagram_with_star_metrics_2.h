@@ -174,41 +174,57 @@ public:
     THREE_SITE_BISECTOR,
   };
 
+  //! An end of the boundary edge.
   struct Boundary_vertex_info
   {
+    //! The iterator pointing to the boundary edge. The vertex corresponds to the source of this edge.
     Boundary_edge_iterator ed;
+
+    //! The cone containing this boundary vertex.
     Cone_descriptor k;
   };
 
+  //! A boundary cone transition vertex.
   struct Boundary_cone_info
   {
+    //! The boundary edge containing this vertex.
     Boundary_edge_iterator ed;
+    //! The two cones of the same site with shared edge.
     Cone_descriptor k0, k1;
   };
 
-  struct Boundary_bisector_info
+  //! A boundary bisector vertex.
+  struct Boundary_bisector_vertex_info
   {
+    //! The boundary edge containing this vertex.
     Boundary_edge_iterator ed;
+    //! The two cones of two different sites defining the bisector.
     Cone_descriptor k0, k1;
   };
 
-  struct Two_site_bisector_info
+  //! A cone transition vertex.
+  struct Cone_transition_vertex_info
   {
+    //! The first cone defining the bisector.
     Cone_descriptor k0;
+    //! The second site.
     Site_const_iterator c1;
+    //! The vertex on the metric of the second site corresponding to the cone boundary the vertex lies on.
     Metric_vertex_circulator m1;
   };
 
-  struct Three_site_bisector_info
+  //! A junction vertex where three bisectors meet.
+  struct Junction_vertex_info
   {
+    //! The three cones defining the junction.
     Cone_descriptor k0, k1, k2;
   };
 
   using Vertex_info = std::variant<Boundary_vertex_info,
                                    Boundary_cone_info,
-                                   Boundary_bisector_info,
-                                   Two_site_bisector_info,
-                                   Three_site_bisector_info>;
+                                   Boundary_bisector_vertex_info,
+                                   Cone_transition_vertex_info,
+                                   Junction_vertex_info>;
 
   using Voronoi_diagram_vertex_point_pmap =
       typename Default::Get<VoronoiDiagramVertexPointPMap,
@@ -245,6 +261,13 @@ public:
      */
     Voronoi_diagram(const Voronoi_diagram&) = delete;
 
+    /*!
+     * \brief Add a Voronoi vertex to the graph with associated info.
+     *
+     * \param p The point representing the vertex location.
+     * \param info The information associated with the vertex.
+     * \return vd_vertex_descriptor The descriptor of the added vertex.
+     */
     vd_vertex_descriptor add_vertex(const Point_2& p, const Vertex_info& info) {
       auto vd = CGAL::add_vertex(graph);
       put(vertex_point_map, vd, p);
@@ -253,6 +276,15 @@ public:
       return vd;
     }
 
+    /*!
+     * \brief Connect two Voronoi vertices with a halfedge pair and set their incident faces.
+     *
+     * \param v0 The source vertex descriptor.
+     * \param v1 The target vertex descriptor.
+     * \param fd01 The face descriptor for the halfedge from v0 to v1.
+     * \param fd10 The face descriptor for the halfedge from v1 to v0.
+     * \return vd_halfedge_descriptor The descriptor of the added halfedge.
+     */
     vd_halfedge_descriptor
     connect(vd_vertex_descriptor v0, vd_vertex_descriptor v1, vd_face_descriptor fd01, vd_face_descriptor fd10) {
       auto hd01 = connect_vertices_2(v0, v1, graph, vertex_point_map, m_traits);
@@ -519,7 +551,7 @@ protected:
 
   enum Endpoint_type { CCW = 1, SITE = 0, CW = -1, UNKNOWN = -2 };
 
-  struct Internal_trace
+  struct Interior_trace
   {
     Parametric_line_2 bisector;
     Cone_descriptor k0, k1;
@@ -527,7 +559,7 @@ protected:
     vd_vertex_descriptor v_vd;
     Endpoint_type prev_type;
 
-    Internal_trace(Parametric_line_2 bi,
+    Interior_trace(Parametric_line_2 bi,
                    Cone_descriptor k0,
                    Cone_descriptor k1,
                    std::optional<Cone_descriptor> k_prev,
@@ -555,13 +587,20 @@ protected:
 
 #pragma region public methods
 public:
+  /*!
+   * \brief Construct a new Voronoi_diagram_with_star_metrics_2 object.
+   *
+   * \param boundary The polygonal boundary within which the Voronoi diagram is constructed.
+   * \param traits The traits class used for geometric computations.
+   */
   Voronoi_diagram_with_star_metrics_2(const Polygon_2& boundary, Traits traits = {})
       : m_boundary(boundary)
       , m_traits(std::move(traits)) {
     reset();
   }
 
-  /// Accessors
+  /// \name Accessors
+  /// @{
   auto& boundary() const { return m_boundary; }
   auto& traits() const { return m_traits; }
 
@@ -576,8 +615,10 @@ public:
 
   const auto& voronoi_diagram() const { return *m_voronoi; }
   Const_voronoi_diagram_ptr voronoi_diagram_ptr() const { return m_voronoi; }
+  /// @}
 
-  /// Modifiers
+  /// \name Modifiers
+  /// @{
   Metric_iterator add_metric(Metric m) {
     if(orientation_2(m.begin(), m.end(), m_traits) != COUNTERCLOCKWISE) {
       m.reverse_orientation();
@@ -590,8 +631,17 @@ public:
   void clear_sites() { m_sites.clear(); }
 
   void clear_metrics() { m_metrics.clear(); }
+  /// @}
 
-  /// VD construction
+  /// \name VD Construction
+  /// @{
+
+  /*!
+   * \brief Compute the distance from a site specified by site_it to a point p using the site's metric.
+   *
+   * ed_out is set to the metric edge corresponding to the direction from the site to point p.
+   * \return FT the computed distance, or std::nullopt if the point coincides with the site.
+   */
   std::optional<FT> distance(Site_const_iterator site_it, const Point_2& p, Metric_edge_circulator& ed_out) const {
     auto res = site_it->metric()->any_intersection(construct_vector(site_it->point(), p));
     if(!res)
@@ -603,6 +653,11 @@ public:
     return d;
   }
 
+  /*!
+   * \brief Find the nearest site to point p and set cone to the corresponding cone descriptor.
+
+   * \return FT the distance to the nearest site.
+   */
   FT find_nearest_site(const Point_2& p, Cone_descriptor& cone) const {
     FT d_min;
     bool init = true;
@@ -624,6 +679,19 @@ public:
     return d_min;
   }
 
+  /*!
+   * \brief Trace along an edge of the boundary polygon, from the source to the target vertex.
+   *
+   * \param b_ed The boundary edge iterator to start tracing from.
+   * \param k0 The initial cone descriptor.
+   * \param prev_vd The previous Voronoi vertex descriptor.
+   * \param add_border_edges Whether to add border edges to the Voronoi diagram.
+   * \param add_cone_vertices Whether to add boundary cone transition vertices to the Voronoi diagram.
+   * \param fd0 The face descriptor corresponding to the left hand side of the boundary edge in the tracing direction.
+   * \param fd1 The face descriptor corresponding to the right hand side of the boundary edge in the tracing direction.
+   * \return The cone descriptor at the end of the traced boundary edge, and the last Voronoi vertex descriptor added.
+   *         If no vertices were added, prev_vd is returned.
+   */
   auto trace_boundary(Boundary_edge_iterator b_ed,
                       Cone_descriptor k0,
                       vd_vertex_descriptor prev_vd,
@@ -703,7 +771,7 @@ public:
         Boundary_vertex_id v_id(cone_index(k0), cone_index(k1));
 
         Point_2 p = construct_point_on(b_line, tb_min);
-        auto v_vd = m_voronoi->add_vertex(p, Boundary_bisector_info{b_ed, k0, k1});
+        auto v_vd = m_voronoi->add_vertex(p, Boundary_bisector_vertex_info{b_ed, k0, k1});
         if(add_border_edges && prev_vd != vd_graph_traits::null_vertex()) {
           m_voronoi->connect(prev_vd, v_vd, fd0, fd1);
         }
@@ -757,6 +825,14 @@ public:
     return std::make_pair(k0, prev_vd);
   }
 
+  /*!
+   * \brief Trace all boundary edges of (a part of) polygonal boundary.
+   *
+   * \param b_ed0 The starting boundary edge iterator.
+   * \param b_ed1 The ending boundary edge iterator.
+   * \param add_border_edges Whether to add border edges to the Voronoi diagram.
+   * \param add_cone_vertices Whether to add boundary cone transition vertices to the Voronoi diagram.
+   */
   void trace_all_boundaries(Boundary_edge_iterator b_ed0,
                             Boundary_edge_iterator b_ed1,
                             bool add_border_edges = true,
@@ -784,12 +860,18 @@ public:
     }
   }
 
+  /*!
+   * \brief Trace all boundary edges of the polygonal boundary. This is a convenience overload that
+   * calls Voronoi_diagram_with_star_metrics_2::trace_all_boundaries(Boundary_edge_iterator, Boundary_edge_iterator,
+   * bool, bool) with the full boundary range.
+   */
   void trace_all_boundaries(bool add_border_edges = true, bool add_cone_vertices = false) {
     auto b_ed0 = m_boundary.edges_begin();
     auto b_ed1 = m_boundary.edges_end();
     trace_all_boundaries(b_ed0, b_ed1, add_border_edges, add_cone_vertices);
   }
 
+  /*! \brief Reset the Voronoi diagram and clear all tracing queues. */
   void reset() {
     m_voronoi = std::make_shared<Voronoi_diagram>(m_traits);
     m_dummy_face = add_face(m_voronoi->graph);
@@ -804,6 +886,7 @@ public:
     // i_trace_timer.reset();
   }
 
+  /*! \brief Process a single interior trace from the queue. */
   bool step() {
     if(m_i_traces.empty()) {
       return false;
@@ -816,6 +899,7 @@ public:
     return true;
   }
 
+  /*! \brief Build the Voronoi diagram by tracing boundaries and processing interior traces. */
   void build(bool add_border_edges = true, bool add_cone_vertices = false) {
     reset();
     trace_all_boundaries(add_border_edges, add_cone_vertices);
@@ -836,6 +920,12 @@ public:
     //      << "s/trace" << std::endl;
   }
 
+  /*!
+   * \brief Assign faces to all halfedges in the Voronoi diagram graph.
+   *
+   * During tracing, all halfedges are initially assigned to a dummy face. This method assigns a unique face
+   * to each connected component of the diagram and removes the dummy face.
+   */
   void trace_faces() {
     for(auto hd : halfedges(m_voronoi->graph)) {
       if(face(hd, m_voronoi->graph) != m_dummy_face)
@@ -849,6 +939,14 @@ public:
     remove_face(m_dummy_face, m_voronoi->graph);
   }
 
+  /*!
+   * \brief Check the validity of the constructed Voronoi diagram.
+   *
+   * For each Voronoi vertex, verify that it is correctly defined by its associated sites and cones.
+   *
+   * \param eps The tolerance for distance comparisons.
+   * \return true if the Voronoi diagram is valid, false otherwise.
+   */
   bool check_voronoi_diagram(FT eps = 1e-6) const {
     for(auto vd : vertices(m_voronoi->graph)) {
       std::visit(overloaded{
@@ -872,7 +970,7 @@ public:
                        //    CGAL_assertion(abs(d_min) < eps);
                        CGAL_assertion(k_nearest == k0 || k_nearest == k1);
                      },
-                     [=, this](const Boundary_bisector_info& info) {
+                     [=, this](const Boundary_bisector_vertex_info& info) {
                        Point_2 p = get(m_voronoi->vertex_point_map, vd);
                        std::clog << "type: boundary bisector: " << p << std::endl;
                        auto [ed, k0, k1] = info;
@@ -890,14 +988,15 @@ public:
                        CGAL_assertion(abs(*d0 - d_min) < eps);
                        CGAL_assertion(k_nearest == k0 || k_nearest == k1);
                      },
-                     [](const Two_site_bisector_info& info) {},
-                     [](const Three_site_bisector_info& info) {},
+                     [](const Cone_transition_vertex_info& info) {},
+                     [](const Junction_vertex_info& info) {},
                  },
                  get(m_voronoi->vertex_info_map, vd));
       std::clog << "check_voronoi_diagram: vertex " << get(m_voronoi->vertex_index_map, vd) << " passed" << std::endl;
     }
     return true;
   }
+  /// @}
 #pragma endregion
 
 #pragma region protected methods
@@ -908,7 +1007,7 @@ protected:
   Traits m_traits;
   Voronoi_diagram_ptr m_voronoi;
 
-  std::deque<Internal_trace> m_i_traces;
+  std::deque<Interior_trace> m_i_traces;
   std::unordered_map<Internal_vertex_id, vd_vertex_descriptor, Internal_vertex_id_hash> m_i_vertices;
   std::unordered_multimap<Boundary_vertex_id, Boundary_trace, Boundary_vertex_id_hash> m_b_traces;
 
@@ -1184,7 +1283,7 @@ protected:
     return construct_line(cx(AB), cy(AB), C);
   }
 
-  void process_i_trace(const Internal_trace& tr) {
+  void process_i_trace(const Interior_trace& tr) {
     FT tmin = 0;
 
     // Clip the bisector with the cone k0 and k1
@@ -1288,7 +1387,7 @@ protected:
       }
 
       Point_2 p = construct_point_on(tr.bisector, tb_min);
-      auto v_vd = m_voronoi->add_vertex(p, Three_site_bisector_info{tr.k0, tr.k1, k2_min});
+      auto v_vd = m_voronoi->add_vertex(p, Junction_vertex_info{tr.k0, tr.k1, k2_min});
       m_voronoi->connect(tr.v_vd, v_vd, m_dummy_face, m_dummy_face);
       m_i_vertices.emplace(vid, v_vd);
 
@@ -1326,7 +1425,7 @@ protected:
       Point_2 p = construct_point_on(tr.bisector, k_next_info->ts);
       auto [m10, m11] = *k1_prev.edge();
       auto v_vd = m_voronoi->add_vertex(
-          p, Two_site_bisector_info{k0_next, k1_next.site(), k_next_info->type == CCW ? m11 : m10});
+          p, Cone_transition_vertex_info{k0_next, k1_next.site(), k_next_info->type == CCW ? m11 : m10});
       m_voronoi->connect(tr.v_vd, v_vd, m_dummy_face, m_dummy_face);
       m_i_vertices.emplace(v_id, v_vd);
 
