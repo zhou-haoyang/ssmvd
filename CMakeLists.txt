@@ -13,6 +13,7 @@ option(SSM_INCLUDE_CGAL "Include CGAL" OFF)
 option(SSM_BUILD_APP "Build the sample GUI" OFF)
 option(SSM_BUILD_TESTS "Build tests when building different projects" OFF)
 option(SSM_BUILD_EXAMPLES "Build examples" ON)
+option(SSM_BUILD_DOCS "Build documentation" OFF)
 
 set(CGAL_FIND_COMPONENTS Core)
 
@@ -73,4 +74,15 @@ if((CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME OR SSM_BUILD_TESTS)
   AND BUILD_TESTING)
   enable_testing()
   add_subdirectory(tests)
+endif()
+
+if(SSM_BUILD_DOCS)
+  find_package(Doxygen REQUIRED)
+
+  doxygen_add_docs(
+    ssm_docs
+    include
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    COMMENT "Generating documentation with Doxygen"
+  )
 endif()
