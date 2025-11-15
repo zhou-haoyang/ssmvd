@@ -104,7 +104,7 @@ int main(int argc, char** argv) {
     for(auto ed : CGAL::edges(voronoi.graph)) {
       auto v0 = CGAL::source(ed, voronoi.graph);
       auto v1 = CGAL::target(ed, voronoi.graph);
-      scene.add_segment(voronoi.vpm[v0], voronoi.vpm[v1], CGAL::IO::red());
+      scene.add_segment(voronoi.vertex_point_map[v0], voronoi.vertex_point_map[v1], CGAL::IO::red());
     }
 
     size_t i = 0;

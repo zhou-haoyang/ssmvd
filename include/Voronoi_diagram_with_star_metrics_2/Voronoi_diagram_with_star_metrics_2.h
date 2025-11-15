@@ -230,12 +230,12 @@ public:
     using Vertex_info_map = typename boost::property_map<Voronoi_diagram_graph, Vertex_info_property>::type;
 
     Voronoi_diagram_graph graph;
-    Voronoi_diagram_vertex_point_pmap vpm;
+    Voronoi_diagram_vertex_point_pmap vertex_point_map;
     Voronoi_diagram_vertex_index_pmap vertex_index_map;
     Vertex_info_map vertex_info_map;
 
     Voronoi_diagram(const Traits& traits)
-        : vpm(get(vertex_point, graph))
+        : vertex_point_map(get(vertex_point, graph))
         , vertex_index_map(get(vertex_index, graph))
         , vertex_info_map(get(Vertex_info_property{}, graph))
         , m_traits(traits) {}
@@ -247,7 +247,7 @@ public:
 
     vd_vertex_descriptor add_vertex(const Point_2& p, const Vertex_info& info) {
       auto vd = CGAL::add_vertex(graph);
-      put(vpm, vd, p);
+      put(vertex_point_map, vd, p);
       // put(vertex_index_map, vd, num_vertices(graph) - 1);
       put(vertex_info_map, vd, info);
       return vd;
@@ -255,7 +255,7 @@ public:
 
     vd_halfedge_descriptor
     connect(vd_vertex_descriptor v0, vd_vertex_descriptor v1, vd_face_descriptor fd01, vd_face_descriptor fd10) {
-      auto hd01 = connect_vertices_2(v0, v1, graph, vpm, m_traits);
+      auto hd01 = connect_vertices_2(v0, v1, graph, vertex_point_map, m_traits);
       auto hd10 = opposite(hd01, graph);
 
       set_face(hd01, fd01, graph);
@@ -854,7 +854,7 @@ public:
       std::visit(overloaded{
                      [&, this](const Boundary_vertex_info& info) {
                        std::clog << "type: boundary vertex" << std::endl;
-                       Point_2 p = get(m_voronoi->vpm, vd);
+                       Point_2 p = get(m_voronoi->vertex_point_map, vd);
 
                        Cone_descriptor k_nearest = null_cone();
                        find_nearest_site(p, k_nearest);
@@ -862,7 +862,7 @@ public:
                      },
                      [&, this](const Boundary_cone_info& info) {
                        std::clog << "type: boundary cone" << std::endl;
-                       Point_2 p = get(m_voronoi->vpm, vd);
+                       Point_2 p = get(m_voronoi->vertex_point_map, vd);
                        auto [ed, k0, k1] = info;
 
                        Cone_descriptor k_nearest = null_cone();
@@ -873,7 +873,7 @@ public:
                        CGAL_assertion(k_nearest == k0 || k_nearest == k1);
                      },
                      [=, this](const Boundary_bisector_info& info) {
-                       Point_2 p = get(m_voronoi->vpm, vd);
+                       Point_2 p = get(m_voronoi->vertex_point_map, vd);
                        std::clog << "type: boundary bisector: " << p << std::endl;
                        auto [ed, k0, k1] = info;
                        Metric_edge_circulator ed0, ed1;
