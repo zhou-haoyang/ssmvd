@@ -1,7 +1,7 @@
 #ifndef VORONOI_DIAGRAM_WITH_STAR_METRICS_2_H
 #define VORONOI_DIAGRAM_WITH_STAR_METRICS_2_H
 
-#include <Voronoi_diagram_with_star_metrics_2/Voronoi_diagram_with_star_metrics_2_traits.h>
 #include <Voronoi_diagram_with_star_metrics_2/Voronoi_diagram_with_star_metrics_2.h>
+#include <Voronoi_diagram_with_star_metrics_2/Voronoi_diagram_with_star_metrics_2_traits.h>
 
-#endif  // VORONOI_DIAGRAM_WITH_STAR_METRICS_2_H
+#endif // VORONOI_DIAGRAM_WITH_STAR_METRICS_2_H
