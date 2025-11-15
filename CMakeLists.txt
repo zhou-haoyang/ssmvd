@@ -46,26 +46,6 @@ target_include_directories(ssm INTERFACE ${thread_pool_SOURCE_DIR}/include)
 
 target_link_libraries(ssm INTERFACE CGAL::CGAL)
 
-if(SSM_BUILD_APP)
-  add_executable(ssm_app src/main.cpp)
-
-  FetchContent_Declare(
-    libigl
-    GIT_REPOSITORY https://github.com/libigl/libigl.git
-    GIT_TAG v2.5.0
-  )
-
-  # set(LIBIGL_WITH_CGAL ON)
-  FetchContent_MakeAvailable(libigl)
-  igl_include(glfw)
-  igl_include(imgui)
-  igl_include(stb)
-
-  find_package(Eigen3 3.3 REQUIRED NO_MODULE)
-
-  target_link_libraries(ssm_app PRIVATE ssm igl::core igl::opengl igl::glfw igl::imgui igl::stb Eigen3::Eigen)
-endif()
-
 if(SSM_BUILD_EXAMPLES)
   add_subdirectory(examples)
 endif()
