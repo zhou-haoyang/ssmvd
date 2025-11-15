@@ -40,6 +40,27 @@
     }
 
 namespace CGAL::Voronoi_diagram_with_star_metrics_2 {
+/**
+ * @brief Compute the Voronoi diagram induced by star-metrics attached to sites inside a planar boundary.
+ *
+ * This class implements the construction of a Voronoi diagram where each site is associated with a
+ * polygonal "metric" (a star-shaped polygon) and distances are measured according to these metrics.
+ * The implementation exposes a lightweight graph-based Voronoi diagram representation and utilities
+ * to add sites/metrics and to build/traverse the diagram.
+ *
+ * \tparam Traits: a traits class providing geometric types and metric-related functors.
+ * \tparam VoronoiDiagramVertexPointPMap, VoronoiDiagramVertexIndexPMap: optional property map types for
+ *   vertex point/index storage in the underlying Voronoi graph.
+ *
+ * Typical usage:
+ *  - construct with a `Polygon_2` boundary and an optional Traits object
+ *  - add metrics via `add_metric(...)`
+ *  - add sites via `add_site(...)`
+ *  - call `build()` to construct the Voronoi diagram
+ *
+ * Thread-safety: construction uses only local state; concurrent reads of the resulting Voronoi graph
+ * are safe if the caller ensures no concurrent modifications.
+ */
 template <class Traits, class VoronoiDiagramVertexPointPMap = Default, class VoronoiDiagramVertexIndexPMap = Default>
 class Voronoi_diagram_with_star_metrics_2 {
 #pragma region public types
@@ -58,6 +79,12 @@ class Voronoi_diagram_with_star_metrics_2 {
     using Metric_vertex_circulator = typename Metric_traits::Metric_vertex_circulator;
     using Metric_edge_circulator = typename Metric_traits::Metric_edge_circulator;
 
+    /**
+     * @brief Encapsulates a geometric metric (polygon) and its auxiliary traits.
+     *
+     * Metric_data stores the polygon representing the metric and a copy of the metric traits used
+     * to query intersections and iterate over polygon vertices/edges.
+     */
     class Metric_data {
        public:
         Metric_data(Metric m, Metric_traits traits) : m_polygon(std::move(m)), m_traits(std::move(traits)) {}
@@ -87,6 +114,12 @@ class Voronoi_diagram_with_star_metrics_2 {
     using Metric_list = std::list<Metric_data>;
     using Metric_iterator = typename Metric_list::const_iterator;
 
+/**
+     * @brief Representation of a site in the diagram.
+     *
+     * A Site contains the site point and an iterator to the associated Metric_data in the
+     * metric list. Sites are stored in a list to keep stable iterators used throughout the algorithm.
+     */
     class Site {
        public:
         Site(Point_2 p, Metric_iterator m) : m_point(std::move(p)), m_metric(std::move(m)) {}
@@ -102,6 +135,12 @@ class Voronoi_diagram_with_star_metrics_2 {
     using Site_list = std::list<Site>;
     using Site_const_iterator = typename Site_list::const_iterator;
 
+/**
+     * @brief Descriptor for a cone (site + incident edge) used for tracing bisectors.
+     *
+     * A cone is uniquely identified by the site iterator and a metric edge circulator pointing to
+     * the cone boundary edge. Cone_descriptor is lightweight and comparable.
+     */
     class Cone_descriptor {
        public:
         Cone_descriptor(Site_const_iterator s = {}, Metric_edge_circulator e = Metric_edge_circulator{})
@@ -170,6 +209,13 @@ class Voronoi_diagram_with_star_metrics_2 {
         typename Default::Get<VoronoiDiagramVertexIndexPMap,
                               typename boost::property_map<Voronoi_diagram_graph, vertex_index_t>::const_type>::type;
 
+/**
+     * @brief Lightweight wrapper storing the underlying Voronoi graph and its property maps.
+     *
+     * This struct owns the graph used to store Voronoi vertices/edges and exposes helper methods
+     * to add vertices and connect them. The copy constructor is deleted because property maps
+     * reference the internal graph storage.
+     */
     struct Voronoi_diagram {
         using Vertex_info_property = CGAL::dynamic_vertex_property_t<Vertex_info>;
         using Vertex_info_map = typename boost::property_map<Voronoi_diagram_graph, Vertex_info_property>::type;

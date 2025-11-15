@@ -9,6 +9,14 @@
 #include <optional>
 
 namespace CGAL {
+/**
+ * @brief A simple parametric line class in 3D: p(t) = p + t * d.
+ *
+ * Parametric_line_3 is a small value type that stores an origin point and a direction vector and
+ * provides helpers to evaluate a point at parameter t, query the parameter of a point on the line,
+ * and compute squared distances. The implementation delegates geometric operations to the
+ * kernel `R_` provided as template parameter.
+ */
 template <class R_>
 struct Parametric_line_3 {
    public:
@@ -46,6 +54,13 @@ struct Parametric_line_3 {
     Vector_3 m_d;
 };
 
+/**
+ * @brief Traits class providing operations on Parametric_line_3.
+ *
+ * This traits class wraps kernel operations needed to construct and manipulate parametric lines
+ * (construction, intersection with planes/lines, parameter computation, distance, etc.). It is
+ * intended for use where algorithms expect an object providing these function objects.
+ */
 template <class K_, class T_ = double>
 class Parametric_line_traits_3 {
    public:

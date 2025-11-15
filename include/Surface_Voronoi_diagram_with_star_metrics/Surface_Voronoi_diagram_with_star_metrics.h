@@ -55,6 +55,17 @@ namespace CGAL {
 namespace Surface_Voronoi_diagram_with_star_metrics {
 namespace PMP = Polygon_mesh_processing;
 
+/**
+ * @brief Compute Voronoi diagrams on a surface mesh using star-metrics.
+ *
+ * This class generalizes the planar star-metric Voronoi diagram to surface meshes. Each site is
+ * associated with a metric polyhedron (a discretized star-shaped metric). The class provides
+ * operations to add sites/metrics, build the surface Voronoi diagram and inspect the resulting
+ * face/edge/vertex information stored in a halfedge-based Voronoi graph.
+ *
+ * Template parameters mirror the Traits and property map types required to bridge the surface mesh,
+ * metric polyhedron and the Voronoi graph.
+ */
 template <class Traits, class MeshVertexPointPMap = Default, class MeshFaceIndexPMap = Default,
           class MeshEdgeIndexPMap = Default, class MetricVertexPointPMap = Default, class MetricFaceIndexPMap = Default,
           class VoronoiDiagramVertexPointPMap = Default, class VoronoiDiagramVertexIndexPMap = Default>

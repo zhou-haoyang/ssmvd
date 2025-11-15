@@ -136,6 +136,14 @@ typename boost::graph_traits<G>::halfedge_descriptor connect_vertices(
     return hd01;
 }
 
+/**
+ * @brief Connect two Voronoi vertices in a 3D-like setting.
+ *
+ * This helper creates an edge between v0 and v1 and inserts the new halfedges into the
+ * circular halfedge loops around the target vertices using projected 2D ordering derived from
+ * the provided normals `n0` and `n1`.
+ */
+
 template <class G, class GT, class VPM>
 typename boost::graph_traits<G>::halfedge_descriptor connect_vertices_3(
     typename boost::graph_traits<G>::vertex_descriptor v0, typename boost::graph_traits<G>::vertex_descriptor v1,
