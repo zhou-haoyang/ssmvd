@@ -31,8 +31,8 @@
   void set_##name(type name) { m_##name = std::move(name); }
 
 namespace CGAL::Voronoi_diagram_with_star_metrics_2 {
-/**
- * @brief Compute the Voronoi diagram induced by star-metrics attached to sites inside a planar boundary.
+/*!
+ * \brief Compute the Voronoi diagram induced by star-metrics attached to sites inside a planar boundary.
  *
  * This class implements the construction of a Voronoi diagram where each site is associated with a
  * polygonal "metric" (a star-shaped polygon) and distances are measured according to these metrics.
@@ -71,8 +71,8 @@ public:
   using Metric_vertex_circulator = typename Metric_traits::Metric_vertex_circulator;
   using Metric_edge_circulator = typename Metric_traits::Metric_edge_circulator;
 
-  /**
-   * @brief Encapsulates a geometric metric (polygon) and its auxiliary traits.
+  /*!
+   * \brief Encapsulates a geometric metric (polygon) and its auxiliary traits.
    *
    * Metric_data stores the polygon representing the metric and a copy of the metric traits used
    * to query intersections and iterate over polygon vertices/edges.
@@ -109,8 +109,8 @@ public:
   using Metric_list = std::list<Metric_data>;
   using Metric_iterator = typename Metric_list::const_iterator;
 
-  /**
-   * @brief Representation of a site in the diagram.
+  /*!
+   * \brief Representation of a site in the diagram.
    *
    * A Site contains the site point and an iterator to the associated Metric_data in the
    * metric list. Sites are stored in a list to keep stable iterators used throughout the algorithm.
@@ -133,8 +133,8 @@ public:
   using Site_list = std::list<Site>;
   using Site_const_iterator = typename Site_list::const_iterator;
 
-  /**
-   * @brief Descriptor for a cone (site + incident edge) used for tracing bisectors.
+  /*!
+   * \brief Descriptor for a cone (site + incident edge) used for tracing bisectors.
    *
    * A cone is uniquely identified by the site iterator and a metric edge circulator pointing to
    * the cone boundary edge. Cone_descriptor is lightweight and comparable.
@@ -217,8 +217,8 @@ public:
       typename Default::Get<VoronoiDiagramVertexIndexPMap,
                             typename boost::property_map<Voronoi_diagram_graph, vertex_index_t>::const_type>::type;
 
-  /**
-   * @brief Lightweight wrapper storing the underlying Voronoi graph and its property maps.
+  /*!
+   * \brief Lightweight wrapper storing the underlying Voronoi graph and its property maps.
    *
    * This struct owns the graph used to store Voronoi vertices/edges and exposes helper methods
    * to add vertices and connect them. The copy constructor is deleted because property maps
@@ -240,8 +240,8 @@ public:
         , vertex_info_map(get(Vertex_info_property{}, graph))
         , m_traits(traits) {}
 
-    /**
-     * @brief The copy constructor is deleted to avoid the property map ownership issue.
+    /*!
+     * \brief The copy constructor is deleted to avoid the property map ownership issue.
      */
     Voronoi_diagram(const Voronoi_diagram&) = delete;
 
@@ -944,12 +944,12 @@ protected:
 
   Cone_descriptor null_cone() const { return Cone_descriptor(m_sites.end(), Metric_edge_circulator{}); }
 
-  /**
-   * @brief Find the intersection of a parametric line with a ray with direction d and starting at the origin.
+  /*!
+   * \brief Find the intersection of a parametric line with a ray with direction d and starting at the origin.
    *
-   * @param l
-   * @param d
-   * @return std::optional<FT>
+   * \param l
+   * \param d
+   * \return std::optional<FT>
    */
   std::optional<std::variant<Parameter_pair, Colinear>>
   intersect_ray(const Vector_2& lp, const Vector_2& ld, const Vector_2& rd) {

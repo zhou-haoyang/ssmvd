@@ -16,22 +16,22 @@ public:
 
   int output_level() const { return _output_level; }
 
-  /**
-   * @brief Change the verbosity level of current stream.
+  /*!
+   * \brief Change the verbosity level of current stream.
    *
-   * @param level The verbosity level.
-   * @return Verbosity_level_ostream&
+   * \param level The verbosity level.
+   * \return Verbosity_level_ostream&
    */
   Verbosity_level_ostream& level(int level) {
     _level = level;
     return *this;
   }
 
-  /**
-   * @brief Set the maximum output level of verbosity. Any output with a level higher than this will be suppressed.
+  /*!
+   * \brief Set the maximum output level of verbosity. Any output with a level higher than this will be suppressed.
    *
-   * @param output_level The maximum output level of verbosity.
-   * @return Verbosity_level_ostream&
+   * \param output_level The maximum output level of verbosity.
+   * \return Verbosity_level_ostream&
    */
   Verbosity_level_ostream& output_level(int output_level) {
     _output_level = output_level;

@@ -9,8 +9,8 @@
 #include <utility>
 
 namespace CGAL {
-/**
- * @brief A simple parametric line class in 3D: p(t) = p + t * d.
+/*!
+ * \brief A simple parametric line class in 3D: p(t) = p + t * d.
  *
  * Parametric_line_3 is a small value type that stores an origin point and a direction vector and
  * provides helpers to evaluate a point at parameter t, query the parameter of a point on the line,
@@ -56,8 +56,8 @@ private:
   Vector_3 m_d;
 };
 
-/**
- * @brief Traits class providing operations on Parametric_line_3.
+/*!
+ * \brief Traits class providing operations on Parametric_line_3.
  *
  * This traits class wraps kernel operations needed to construct and manipulate parametric lines
  * (construction, intersection with planes/lines, parameter computation, distance, etc.). It is

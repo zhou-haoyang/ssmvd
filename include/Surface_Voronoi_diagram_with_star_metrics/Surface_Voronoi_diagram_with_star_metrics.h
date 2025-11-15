@@ -52,8 +52,8 @@ namespace CGAL {
 namespace Surface_Voronoi_diagram_with_star_metrics {
 namespace PMP = Polygon_mesh_processing;
 
-/**
- * @brief Compute Voronoi diagrams on a surface mesh using star-metrics.
+/*!
+ * \brief Compute Voronoi diagrams on a surface mesh using star-metrics.
  *
  * This class generalizes the planar star-metric Voronoi diagram to surface meshes. Each site is
  * associated with a metric polyhedron (a discretized star-shaped metric). The class provides
@@ -346,8 +346,8 @@ public:
   {
     Cone_descriptor k;
 
-    /**
-     * @brief The face of surface mesh containing the halfedge.
+    /*!
+     * \brief The face of surface mesh containing the halfedge.
      *
      * If the halfedge is on the boundary, the face corresponds to the mesh boundary halfedge.
      */
@@ -381,8 +381,8 @@ public:
         , edge_info_map(get(Edge_info_property{}, graph))
         , halfedge_info_map(get(Halfedge_info_property{}, graph)) {}
 
-    /**
-     * @brief The copy constructor is deleted to avoid the property map ownership issue.
+    /*!
+     * \brief The copy constructor is deleted to avoid the property map ownership issue.
      */
     Voronoi_diagram_data(const Voronoi_diagram_data&) = delete;
 
@@ -434,12 +434,12 @@ public:
       return hd01;
     }
 
-    /**
-     * @brief Remove halfedge `hd` from the halfedge loop around the target vertex `target(hd, graph)`.
+    /*!
+     * \brief Remove halfedge `hd` from the halfedge loop around the target vertex `target(hd, graph)`.
      * Return true if the target vertex is not orphaned after the removal.
-     * @param hd
-     * @return true
-     * @return false
+     * \param hd
+     * \return true
+     * \return false
      */
     bool remove_halfedge(vd_halfedge_descriptor hd) {
       // Find the previous halfedge in the target vertex loop
@@ -468,10 +468,10 @@ public:
       }
     }
 
-    /**
-     * @brief Remove `halfedge(ed, graph)` and `opposite(halfedge(ed, graph), graph)` from the loop of halfedge
+    /*!
+     * \brief Remove `halfedge(ed, graph)` and `opposite(halfedge(ed, graph), graph)` from the loop of halfedge
      * around target. This does not remove the edge but isolate the edge from the graph.
-     * @param ed
+     * \param ed
      */
     void detach_edge(vd_edge_descriptor ed) {
       auto hd = halfedge(ed, graph), ohd = opposite(hd, graph);
@@ -481,11 +481,11 @@ public:
       set_next(ohd, hd, graph);
     }
 
-    /**
-     * @brief Detach the edge from the graph then remove the edge.
+    /*!
+     * \brief Detach the edge from the graph then remove the edge.
      *
-     * @param ed
-     * @param remove_orphaned_vertex
+     * \param ed
+     * \param remove_orphaned_vertex
      */
     void remove_edge(vd_edge_descriptor ed) {
       detach_edge(ed);
@@ -671,8 +671,8 @@ public:
     mesh_halfedge_descriptor face_hd;
     mesh_halfedge_descriptor prev_hd;
     Cone_descriptor k0, k1, k_prev;
-    /**
-     * @brief When the previous itrace goes through a cone and enter the neighboring cone,
+    /*!
+     * \brief When the previous itrace goes through a cone and enter the neighboring cone,
      * the metric_prev_hd is the halfedge of current metric that the previous itrace enter the cone.
      */
     metric_halfedge_descriptor metric_prev_hd;
@@ -704,11 +704,11 @@ public:
       return std::make_pair(v0, v1);
     }
 
-    /**
-     * @brief Return the normal of the 2D cone face, pointing inward
+    /*!
+     * \brief Return the normal of the 2D cone face, pointing inward
      *
-     * @param hd
-     * @return Vector_3
+     * \param hd
+     * \return Vector_3
      */
     Vector_3 cone_face_orthogonal_vector(metric_halfedge_descriptor hd) const {
       // TODO: cache the result
@@ -893,14 +893,14 @@ public:
 
   void add_site(const Point_3& p, index_t metric_idx) { m_sites.push_back({p, metric_idx}); }
 
-  /**
-   * @brief Add a metric attached to sites added later.
+  /*!
+   * \brief Add a metric attached to sites added later.
    * To avoid copy, use add_metric(std::move(...), ...) to move the metric.
    *
-   * @param m
-   * @param vpm
-   * @param fim
-   * @return index_t
+   * \param m
+   * \param vpm
+   * \param fim
+   * \return index_t
    */
   index_t add_metric(Metric_polyhedron m, Metric_vertex_point_pmap vpm, Metric_face_index_pmap fim) {
     auto idx = m_metrics.size();
@@ -1799,14 +1799,14 @@ protected:
     return find_next_cone(m, k.face, hd_prev, p, d, tmin, tmax);
   }
 
-  /**
-   * @brief Find all intervals within a segment or a ray divided by cones of a site
+  /*!
+   * \brief Find all intervals within a segment or a ray divided by cones of a site
    *
-   * @param site_idx
-   * @param segment
-   * @param tmin
-   * @param tmax
-   * @param res
+   * \param site_idx
+   * \param segment
+   * \param tmin
+   * \param tmax
+   * \param res
    */
   void find_segment_cone_intersections(
       index_t site_idx, const Parametric_line_3& segment, FT tmin, FT tmax, Segment_cone_intersections& res) const {

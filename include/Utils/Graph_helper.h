@@ -2,8 +2,8 @@
 #define UTILS_GRAPH_HELPER_H
 namespace CGAL {
 
-/**
- * @brief A monotonic function mapping the angle between two vectors in range [0, 2pi) to [-2, 2)
+/*!
+ * \brief A monotonic function mapping the angle between two vectors in range [0, 2pi) to [-2, 2)
  */
 template <class GT>
 inline typename GT::FT angle_func(const typename GT::Vector_2& v1, const typename GT::Vector_2& v2, const GT& traits) {
@@ -144,8 +144,8 @@ connect_vertices(typename boost::graph_traits<G>::vertex_descriptor v0,
   return hd01;
 }
 
-/**
- * @brief Connect two Voronoi vertices in a 3D-like setting.
+/*!
+ * \brief Connect two Voronoi vertices in a 3D-like setting.
  *
  * This helper creates an edge between v0 and v1 and inserts the new halfedges into the
  * circular halfedge loops around the target vertices using projected 2D ordering derived from
