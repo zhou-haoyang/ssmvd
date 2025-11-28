@@ -7,13 +7,13 @@
 namespace CGAL::Surface_Voronoi_diagram_with_star_metrics {
 template <class K, class SurfaceMesh, class MetricPolyhedron, class VoronoiDiagram, class MetricTraits>
 class Surface_Voronoi_diagram_with_star_metrics_traits : public K,
-                                                         public Parametric_line_traits_3<K>,
+                                                         public Parametric_line_traits_3<K, typename K::FT>,
                                                          public MetricTraits
 {
 public:
   using Kernel = K;
   using FT = Kernel::FT;
-  using T = double;
+  using T = FT;
 
   using Point_3 = Kernel::Point_3;
   using Vector_3 = Kernel::Vector_3;
