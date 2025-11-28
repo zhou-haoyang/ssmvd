@@ -874,22 +874,19 @@ public:
                                             Mesh_vertex_point_pmap vpm,
                                             Mesh_face_index_pmap face_index_map,
                                             Mesh_edge_index_pmap edge_index_map,
-                                            std::size_t num_threads = std::thread::hardware_concurrency(),
                                             Traits traits = Traits())
       : mesh(mesh)
       , vpm(std::move(vpm))
       , face_index_map(std::move(face_index_map))
       , edge_index_map(std::move(edge_index_map))
-      , pool(num_threads)
       , traits(traits) {
     reset();
   }
 
   Surface_Voronoi_diagram_with_star_metrics(const Surface_mesh& mesh,
-                                            std::size_t num_threads = std::thread::hardware_concurrency(),
                                             Traits traits = Traits())
       : Surface_Voronoi_diagram_with_star_metrics(
-            mesh, get(vertex_point, mesh), get(face_index, mesh), get(edge_index, mesh), num_threads, traits) {}
+            mesh, get(vertex_point, mesh), get(face_index, mesh), get(edge_index, mesh), traits) {}
 
   void add_site(const Point_3& p, index_t metric_idx) { m_sites.push_back({p, metric_idx}); }
 
@@ -1167,7 +1164,9 @@ public:
         vd_vertex_descriptor v_vd;
 
         {
+#ifndef CGAL_HAS_NO_THREADS
           std::lock_guard lock(vd_mutex);
+#endif
 
           if(auto vd_it = b_vert_map.find(bvid); vd_it != b_vert_map.cend()) {
             v_vd = vd_it->second;
@@ -1181,7 +1180,9 @@ public:
              << pt_start << std::endl;
 
         if(add_border_edges && prev_vd != vd_graph_traits::null_vertex()) {
+#ifndef CGAL_HAS_NO_THREADS
           std::lock_guard lock(vd_mutex);
+#endif
           voronoi->connect(prev_vd, v_vd, fd0, fd1, Boundary_edge_info{bh}, Halfedge_info{k0, face(bh, mesh)},
                            Halfedge_info{k0, face(bh_opposite, mesh)});
         }
@@ -1192,7 +1193,9 @@ public:
           auto orient = orientation(b_plane.orthogonal_vector(), b_line.d(), bisect_dir);
           auto bisect_line = construct_parametric_line(pt_start, orient == POSITIVE ? bisect_dir : -bisect_dir);
 
+#ifndef CGAL_HAS_NO_THREADS
           std::lock_guard lock(i_trace_mutex);
+#endif
           i_traces.push_back({
               bisect_line,
               bi_plane_min,
@@ -1211,7 +1214,9 @@ public:
           auto orient = orientation(b_plane_opposite.orthogonal_vector(), -b_line.d(), bisect_dir);
           auto bisect_line = construct_parametric_line(pt_start, orient == POSITIVE ? bisect_dir : -bisect_dir);
 
+#ifndef CGAL_HAS_NO_THREADS
           std::lock_guard lock(i_trace_mutex);
+#endif
           i_traces.push_back({
               bisect_line,
               bi_plane_min,
@@ -1243,7 +1248,9 @@ public:
         // Otherwise switch to the next cone
         auto isect = *isect_iter;
         if(add_cone_vertices) {
+#ifndef CGAL_HAS_NO_THREADS
           std::lock_guard lock(vd_mutex);
+#endif
           auto v_vd = voronoi->add_vertex(b_line(isect.second.t_min), Boundary_cone_info{bh, k0}, b_normal);
           if(add_border_edges && prev_vd != vd_graph_traits::null_vertex()) {
             voronoi->connect(prev_vd, v_vd, fd0, fd1, Boundary_edge_info{bh}, Halfedge_info{k0, face(bh, mesh)},
@@ -1327,8 +1334,7 @@ public:
   void trace_all_boundaries(mesh_vertex_descriptor vd,
                             bool add_mesh_vertices = true,
                             bool add_boundary_edges = true,
-                            bool add_cone_vertices = false,
-                            bool multi_thread = true) {
+                            bool add_cone_vertices = false) {
     b_trace_timer.start();
 
     using vd_vertex_t = CGAL::dynamic_vertex_property_t<vd_vertex_descriptor>;
@@ -1353,75 +1359,97 @@ public:
 
     std::function<void(mesh_halfedge_descriptor, Cone_descriptor)> trace;
     std::mutex edge_visited_mutex;
-    trace = [&](mesh_halfedge_descriptor hd, Cone_descriptor k0) {
-      {
-        std::lock_guard lock(exception_mutex);
-        if(exception)
-          return;
-      }
 
+    // Non-recursive trace implementation using an explicit stack.
+    trace = [&](mesh_halfedge_descriptor start_hd, Cone_descriptor start_k0) {
       try {
-        {
-          std::lock_guard lock(edge_visited_mutex);
-          if(get(edge_visited, edge(hd, mesh)))
-            return;
-          put(edge_visited, edge(hd, mesh), true);
-        }
+        // Local stack for DFS-like traversal when running single-threaded.
+        std::vector<std::pair<mesh_halfedge_descriptor, Cone_descriptor>> stack;
+        stack.emplace_back(start_hd, start_k0);
 
-        auto prev_vd = vd_graph_traits::null_vertex();
-        if(add_mesh_vertices) {
-          prev_vd = get(vd_map, source(hd, mesh));
-        }
+        while(!stack.empty()) {
+          {
+#ifndef CGAL_HAS_NO_THREADS
+            std::lock_guard lock(exception_mutex);
+#endif
+            if(exception)
+              return;
+          }
 
-        bool same_side = !is_border(hd, mesh);
-        bool opposite_side = !is_border(opposite(hd, mesh), mesh);
-        auto fd01 = same_side ? dummy_face : vd_graph_traits::null_face();
-        auto fd10 = opposite_side ? dummy_face : vd_graph_traits::null_face();
+          auto [hd, k0] = stack.back();
+          stack.pop_back();
 
-        auto [k, v_vd] = trace_boundary(hd, k0, prev_vd, same_side, opposite_side, add_boundary_edges,
-                                        add_cone_vertices, fd01, fd10);
+          // Check and mark visited atomically
+          {
+            std::lock_guard lock(edge_visited_mutex);
+            if(get(edge_visited, edge(hd, mesh)))
+              continue;
+            put(edge_visited, edge(hd, mesh), true);
+          }
 
-        if(add_boundary_edges && add_mesh_vertices) {
-          std::lock_guard lock(vd_mutex);
-          voronoi->connect(v_vd, get(vd_map, target(hd, mesh)), fd01, fd10, Boundary_edge_info{hd},
-                           Halfedge_info{k, face(hd, mesh)}, Halfedge_info{k, face(opposite(hd, mesh), mesh)});
-        }
+          auto prev_vd = vd_graph_traits::null_vertex();
+          if(add_mesh_vertices) {
+            prev_vd = get(vd_map, source(hd, mesh));
+          }
 
-        for(auto hd_inner : halfedges_around_source(target(hd, mesh), mesh)) {
-          // if (get(edge_visited, edge(hd_inner, mesh))) continue;
-          if(multi_thread)
-            pool.detach_task(std::bind(trace, hd_inner, k));
-          else
-            trace(hd_inner, k);
+          bool same_side = !is_border(hd, mesh);
+          bool opposite_side = !is_border(opposite(hd, mesh), mesh);
+          auto fd01 = same_side ? dummy_face : vd_graph_traits::null_face();
+          auto fd10 = opposite_side ? dummy_face : vd_graph_traits::null_face();
+
+          auto [k, v_vd] = trace_boundary(hd, k0, prev_vd, same_side, opposite_side, add_boundary_edges,
+                                          add_cone_vertices, fd01, fd10);
+
+          if(add_boundary_edges && add_mesh_vertices) {
+#ifndef CGAL_HAS_NO_THREADS
+            std::lock_guard lock(vd_mutex);
+#endif
+            voronoi->connect(v_vd, get(vd_map, target(hd, mesh)), fd01, fd10, Boundary_edge_info{hd},
+                             Halfedge_info{k, face(hd, mesh)}, Halfedge_info{k, face(opposite(hd, mesh), mesh)});
+          }
+
+          // Iterate neighbors. If multi-threaded, spawn a detached task per neighbor so each runs its own stack;
+          // otherwise push neighbor onto local stack to continue iteratively.
+          for(auto hd_inner : halfedges_around_source(target(hd, mesh), mesh)) {
+#ifndef CGAL_HAS_NO_THREADS
+            detach_task(std::bind(trace, hd_inner, k));
+#else
+            stack.emplace_back(hd_inner, k);
+#endif
+          }
         }
       } catch(...) {
+#ifndef CGAL_HAS_NO_THREADS
         std::lock_guard lock(exception_mutex);
+#endif
         exception = std::current_exception();
       }
     };
 
     for(auto hd : halfedges_around_source(vd, mesh)) {
-      if(multi_thread)
-        pool.detach_task(std::bind(trace, hd, k0));
-      else
-        trace(hd, k0);
+#ifndef CGAL_HAS_NO_THREADS
+      detach_task(std::bind(trace, hd, k0));
+#else
+      trace(hd, k0);
+#endif
     }
 
-    // wait for all tasks to finish
-    pool.wait();
+// wait for all tasks to finish
+#ifndef CGAL_HAS_NO_THREADS
+    wait_for_tasks();
+#endif
+
     if(exception)
       std::rethrow_exception(exception);
 
     b_trace_timer.stop();
   }
 
-  void trace_all_boundaries(bool add_mesh_vertices = true,
-                            bool add_boundary_edges = true,
-                            bool add_cone_vertices = false,
-                            bool multi_thread = true) {
+  void
+  trace_all_boundaries(bool add_mesh_vertices = true, bool add_boundary_edges = true, bool add_cone_vertices = false) {
     if(is_empty(mesh))
       return;
-    trace_all_boundaries(*vertices(mesh).first, add_mesh_vertices, add_boundary_edges, add_cone_vertices, multi_thread);
+    trace_all_boundaries(*vertices(mesh).first, add_mesh_vertices, add_boundary_edges, add_cone_vertices);
   }
 
   void reload() { vpm = get(vertex_point, mesh); }
@@ -1465,9 +1493,9 @@ public:
   void process_i_traces() {
     i_trace_timer.start();
     for(auto& trace : i_traces) {
-      pool.detach_task([=, this]() { process_i_trace(trace); });
+      detach_task([=, this]() { process_i_trace(trace); });
     }
-    pool.wait();
+    wait_for_tasks();
     i_traces.clear();
     i_trace_timer.stop();
   }
@@ -1628,21 +1656,24 @@ protected:
   std::shared_ptr<Voronoi_diagram_data> voronoi;
   vd_face_descriptor dummy_face;
 
-  std::mutex vd_mutex, i_trace_mutex;
   std::deque<Internal_trace> i_traces;
   std::unordered_map<Internal_vertex_id, vd_vertex_descriptor, Internal_vertex_id_hash> vert_map;
 
   std::unordered_map<Boundary_vertex_id, vd_vertex_descriptor, Boundary_vertex_id_hash> b_vert_map;
   std::unordered_multimap<vd_vertex_descriptor, mesh_halfedge_descriptor> processed_b_verts;
 
+  std::exception_ptr exception;
+
   /// Disconnected component removal
   std::vector<Disconnected_component> m_disconnected_components_cache;
   std::unordered_multimap<Bisector_segment_id, vd_vertex_descriptor, Bisector_segment_id_hash> bounding_vertices;
 
-  /// Multithreading
-  BS::thread_pool pool;
-  std::exception_ptr exception;
+/// Multithreading
+#ifndef CGAL_HAS_NO_THREADS
+  static inline BS::thread_pool pool;
+  std::mutex vd_mutex, i_trace_mutex;
   std::mutex exception_mutex;
+#endif
 
   inline CGAL_STATIC_THREAD_LOCAL_VARIABLE_0(Segment_cone_intersections, isects_cache);
   inline CGAL_STATIC_THREAD_LOCAL_VARIABLE_0(std::vector<Segment_cone_intersections>, isects_vec_cache);
@@ -1655,6 +1686,17 @@ protected:
 #pragma endregion
 
 #pragma region PrivateMethods
+
+#ifndef CGAL_HAS_NO_THREADS
+  void detach_task(auto&& func) { pool.detach_task(std::forward<decltype(func)>(func)); }
+  void wait_for_tasks() { pool.wait(); }
+#else
+  void detach_task(auto&& func) { func(); }
+  void wait_for_tasks() {
+    // No-op
+  }
+#endif
+
   Cone_index cone_index(const Cone_descriptor& k) const {
     auto [c, m] = site(k.site_idx);
     return {k.site_idx, m.face_index_map[k.face]};
@@ -1861,7 +1903,9 @@ protected:
   void _process_i_trace(const Internal_trace& tr, bool immediate = true) {
     // Check if the bisector has already been traced (from another direction)
     {
+#ifndef CGAL_HAS_NO_THREADS
       std::lock_guard lock(vd_mutex);
+#endif
       auto v_hd = halfedge(tr.v_vd, voronoi->graph);
       auto range = processed_b_verts.equal_range(tr.v_vd);
       for(auto it = range.first; it != range.second; ++it) {
@@ -1989,7 +2033,9 @@ protected:
       Point_3 pt_start;
       vd_vertex_descriptor v_vd;
       {
+#ifndef CGAL_HAS_NO_THREADS
         std::lock_guard lock(vd_mutex);
+#endif
 
         if(auto vd_it = vert_map.find(vid); vd_it != vert_map.cend()) {
           voronoi->connect(tr.v_vd, vd_it->second, dummy_face, dummy_face, Bisector_edge_info{},
@@ -2033,7 +2079,7 @@ protected:
       };
 
       if(immediate)
-        pool.detach_task([=, this]() { process_i_trace(tr02); });
+        detach_task([=, this]() { process_i_trace(tr02); });
       else
         i_traces.push_back(tr02);
 
@@ -2062,7 +2108,7 @@ protected:
       };
 
       if(immediate)
-        pool.detach_task([=, this]() { process_i_trace(tr12); });
+        detach_task([=, this]() { process_i_trace(tr12); });
       else
         i_traces.push_back(tr12);
     } else if(cone_isect) {
@@ -2079,7 +2125,9 @@ protected:
       Point_3 p;
       vd_vertex_descriptor v_vd;
       {
+#ifndef CGAL_HAS_NO_THREADS
         std::lock_guard lock(vd_mutex);
+#endif
 
         if(auto vd_it = vert_map.find(vid); vd_it != vert_map.cend()) {
           voronoi->connect(tr.v_vd, vd_it->second, dummy_face, dummy_face, Bisector_edge_info{},
@@ -2109,11 +2157,13 @@ protected:
       };
 
       if(immediate)
-        pool.detach_task([=, this]() { process_i_trace(tr1); });
+        detach_task([=, this]() { process_i_trace(tr1); });
       else
         i_traces.push_back(tr1);
     } else if(bounding_vd != vd_graph_traits::null_vertex()) {
+#ifndef CGAL_HAS_NO_THREADS
       std::lock_guard lock(vd_mutex);
+#endif
       voronoi->connect(tr.v_vd, bounding_vd, dummy_face, dummy_face, Bisector_edge_info{},
                        Halfedge_info{tr.k0, mesh_fd}, Halfedge_info{tr.k1, mesh_fd});
       CGAL_assertion(degree(bounding_vd, voronoi->graph) == 2);
@@ -2121,7 +2171,9 @@ protected:
     } else {
       // The bisector leaves the face on mesh
       Boundary_vertex_id bvid(cone_index(tr.k0), cone_index(tr.k1), get(edge_index_map, CGAL::edge(edge_hd, mesh)));
+#ifndef CGAL_HAS_NO_THREADS
       std::lock_guard lock(vd_mutex);
+#endif
       auto vd_it = b_vert_map.find(bvid);
       CGAL_assertion_msg(vd_it != b_vert_map.cend(), "Bisector leaves the face from an unknown vertex");
       voronoi->connect(tr.v_vd, vd_it->second, dummy_face, dummy_face, Bisector_edge_info{},
@@ -2132,14 +2184,18 @@ protected:
 
   void process_i_trace(const Internal_trace& tr, bool immediate = true) {
     {
+#ifndef CGAL_HAS_NO_THREADS
       std::lock_guard lock(exception_mutex);
+#endif
       if(exception)
         return;
     }
     try {
       _process_i_trace(tr, immediate);
     } catch(...) {
+#ifndef CGAL_HAS_NO_THREADS
       std::lock_guard lock(exception_mutex);
+#endif
       exception = std::current_exception();
     }
   }
