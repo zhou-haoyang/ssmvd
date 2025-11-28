@@ -1899,7 +1899,8 @@ protected:
     // Clip the bisector ray with bounding vertices
     vd_vertex_descriptor bounding_vd = vd_graph_traits::null_vertex();
     {
-      Bisector_segment_id bisect_id{cone_index(tr.k0), cone_index(tr.k1), get(face_index_map, face(tr.face_hd, mesh))};
+      Bisector_segment_id bisect_id{cone_index(tr.k0), cone_index(tr.k1),
+                                    static_cast<index_t>(get(face_index_map, face(tr.face_hd, mesh)))};
       auto [vd_begin, vd_end] = bounding_vertices.equal_range(bisect_id);
       for(auto it = vd_begin; it != vd_end; ++it) {
         auto vd = it->second;
