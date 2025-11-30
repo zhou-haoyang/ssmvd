@@ -5,6 +5,16 @@
 #include <Parametric_line/Parametric_line_3.h>
 
 namespace CGAL::Surface_Voronoi_diagram_with_star_metrics {
+/*!
+ * \brief Traits class for Surface Voronoi diagrams with star metrics.
+ *
+ * \tparam K Kernel
+ * \tparam SurfaceMesh, MetricPolyhedron Graph types for the surface mesh and metric polyhedron. Both should
+ *   model the FaceGraph concept.
+ * \tparam VoronoiDiagram Voronoi diagram graph type. Should model the MutableFaceGraph concept.
+ * \tparam MetricTraits Metric traits class providing metric-related types and ray intersection functors. Built-in
+ * implementations include AABB_metric_traits and Triangle_mesh_metric_traits.
+ */
 template <class K, class SurfaceMesh, class MetricPolyhedron, class VoronoiDiagram, class MetricTraits>
 class Surface_Voronoi_diagram_with_star_metrics_traits : public K,
                                                          public Parametric_line_traits_3<K, typename K::FT>,

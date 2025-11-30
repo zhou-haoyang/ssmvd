@@ -7,6 +7,12 @@
 #include <optional>
 
 namespace CGAL::Surface_Voronoi_diagram_with_star_metrics {
+/*!
+ * \brief Traits class using a triangle mesh as the star-metric. Provides trivial ray-mesh intersection.
+ *
+ * \tparam K Kernel
+ * \tparam G Graph type for the metric polyhedron. Should model the FaceGraph concept.
+ */
 template <class K, class G> class Triangle_mesh_metric_traits
 {
 public:

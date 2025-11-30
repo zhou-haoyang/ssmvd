@@ -6,6 +6,14 @@
 #include <CGAL/Polygon_2.h>
 
 namespace CGAL::Voronoi_diagram_with_star_metrics_2 {
+/*!
+ * \brief Traits class for Voronoi diagrams with star metrics in the plane.
+ *
+ * \tparam K Kernel
+ * \tparam VoronoiDiagram Voronoi diagram graph type. Should model the MutableFaceGraph concept.
+ * \tparam MetricTraits Metric traits class providing metric-related types and ray intersection functors. Built-in
+ * implementations include Polygon_metric_traits.
+ */
 template <class K, class VoronoiDiagram, class MetricTraits>
 class Voronoi_diagram_with_star_metrics_2_traits : public K, public Parametric_line_traits_2<K>, public MetricTraits
 {

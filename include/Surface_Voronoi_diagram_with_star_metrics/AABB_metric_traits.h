@@ -5,6 +5,12 @@
 #include <optional>
 
 namespace CGAL::Surface_Voronoi_diagram_with_star_metrics {
+/*!
+ * \brief Traits class for star-metrics using an AABB tree for ray intersection.
+ *
+ * \tparam K Kernel
+ * \tparam Tree AABB tree type. Should model the AABBTree concept.
+ */
 template <class K, class Tree> class AABB_metric_traits
 {
 public:

@@ -39,7 +39,8 @@ namespace CGAL::Voronoi_diagram_with_star_metrics_2 {
  * The implementation exposes a lightweight graph-based Voronoi diagram representation and utilities
  * to add sites/metrics and to build/traverse the diagram.
  *
- * \tparam Traits: a traits class providing geometric types and metric-related functors.
+ * \tparam Traits: a traits class providing geometric types and metric-related functors. Any traits
+ *   class used here must at least satisfy the requirements of `Voronoi_diagram_with_star_metrics_2_traits`.
  * \tparam VoronoiDiagramVertexPointPMap, VoronoiDiagramVertexIndexPMap: optional property map types for
  *   vertex point/index storage in the underlying Voronoi graph.
  *
@@ -1148,13 +1149,10 @@ protected:
       return;
 
     auto pmin = construct_point_on(segment, tmin);
-    // auto p = construct_vector(site->point(), construct_point(segment));
-    // auto d = construct_vector(segment);
 
     // TODO: check case 3
 
     auto isect = site->metric()->any_intersected_edge(construct_vector(site->point(), pmin));
-    // auto isect1 = metric_any_intersected_face(m.data, construct_vector(c.point, pmax));
 
     CGAL_assertion(!!isect);
     Metric_edge_circulator ed0 = *isect;
@@ -1179,84 +1177,6 @@ protected:
 
     if(tmax)
       res.add_intersection(*tmax);
-
-    // // Find next cone of ed0
-    // Point_2 p0 = construct_source(*ed0);
-    // auto isect0 = intersect_ray(p, d, construct_vector(ORIGIN, p0), tmin, tmax);
-    // int next_cone_idx = -1;
-    // if (isect0) {
-    //     if (std::holds_alternative<Colinear>(*isect0)) {
-    //         // TODO: case 2.b, 2.c
-    //         CGAL_assertion(false);
-    //     } else {
-    //         auto [ts, tr] = std::get<std::pair<FT, FT>>(*isect0);
-    //         if (is_zero(ts)) {
-    //             // TODO: case 2.a
-
-    //             CGAL_assertion(false);
-    //         } else if (is_zero(tr)) {
-    //             // TODO: case 1.b
-    //             CGAL_assertion(false);
-    //         } else {
-    //             // case 1.a
-    //             res.add_intersection(tmin);
-    //             res.add_edge(ed0);
-
-    //             res.add_intersection(ts);
-
-    //             next_cone_idx = 0;
-    //             ed0 = site->metric()->prev_edge(ed0);
-    //             res.add_edge(ed0);
-    //         }
-    //     }
-    // } else {
-    //     Point_2 p1 = construct_target(*ed0);
-    //     auto isect1 = intersect_ray(p, d, construct_vector(ORIGIN, p1), tmin, tmax);
-    //     if (!isect1) {
-    //         // Segment is in one cone
-    //         res.add_intersection(tmin);
-    //         res.add_edge(ed0);
-    //         if (tmax) res.add_intersection(*tmax);
-    //         return;
-    //     }
-
-    //     if (std::holds_alternative<Colinear>(*isect1)) {
-    //         // TODO: case 2.b, 2.c
-    //         CGAL_assertion(false);
-    //     } else {
-    //         auto [ts, tr] = std::get<std::pair<FT, FT>>(*isect1);
-    //         if (is_zero(ts)) {
-    //             // TODO: case 2.a
-    //             CGAL_assertion(false);
-    //         } else if (is_zero(tr)) {
-    //             // TODO: case 1.b
-    //             CGAL_assertion(false);
-    //         } else {
-    //             // case 1.a
-    //             res.add_intersection(tmin);
-    //             res.add_edge(ed0);
-
-    //             res.add_intersection(ts);
-
-    //             next_cone_idx = 1;
-    //             ed0 = site->metric()->next_edge(ed0);
-    //             res.add_edge(ed0);
-    //         }
-    //     }
-    // }
-
-    // while (true) {
-    //     Point_2 p_next = next_cone_idx == 0 ? construct_source(*ed0) : construct_target(*ed0);
-    //     auto isect_next = intersect_ray(p, d, construct_vector(ORIGIN, p_next), tmin, tmax);
-    //     if (!isect_next) break;
-    //     auto [ts, tr] = std::get<std::pair<FT, FT>>(*isect_next);
-    //     CGAL_assertion(ts > tmin && tr > 0);
-    //     res.add_intersection(ts);
-
-    //     ed0 = next_cone_idx == 0 ? site->metric()->prev_edge(ed0) : site->metric()->next_edge(ed0);
-    //     res.add_edge(ed0);
-    // }
-    // if (tmax) res.add_intersection(*tmax);
   }
 
   void find_all_intervals(const Parametric_line_2& segment,

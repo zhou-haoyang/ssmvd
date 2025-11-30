@@ -10,6 +10,11 @@
 #include <utility>
 
 namespace CGAL::Voronoi_diagram_with_star_metrics_2 {
+/*!
+ * \brief Traits class for polygonal star-metrics in the plane. Provides ray-polygon intersection.
+ *
+ * \tparam K Kernel
+ */
 template <class K> class Polygon_metric_traits
 {
 public:

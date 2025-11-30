@@ -60,8 +60,25 @@ namespace PMP = Polygon_mesh_processing;
  * operations to add sites/metrics, build the surface Voronoi diagram and inspect the resulting
  * face/edge/vertex information stored in a halfedge-based Voronoi graph.
  *
- * Template parameters mirror the Traits and property map types required to bridge the surface mesh,
- * metric polyhedron and the Voronoi graph.
+ * \tparam Traits: a traits class providing geometric types and metric-related functors. Any traits
+ *   class used here must at least satisfy the requirements of
+ *   `Surface_Voronoi_diagram_with_star_metrics_traits`.
+ * \tparam MeshVertexPointPMap, MeshFaceIndexPMap, MeshEdgeIndexPMap: optional property map types for
+ *   vertex point/index storage in the surface mesh.
+ * \tparam MetricVertexPointPMap, MetricFaceIndexPMap: optional property map types for
+ *   vertex point/index storage in the metric polyhedron.
+ * \tparam VoronoiDiagramVertexPointPMap, VoronoiDiagramVertexIndexPMap: optional property map types for
+ *   vertex point/index storage in the Voronoi diagram graph.
+ *
+ * Typical usage:
+ *  - construct with a surface mesh boundary and an optional Traits object
+ *  - add metrics via `add_metric(...)`
+ *  - add sites via `add_site(...)`
+ *  - call `build()` to construct the Voronoi diagram
+ *
+ * Multi-threading: the class has a built-in thread pool to accelerate the construction of the Voronoi diagram.
+ * If it is built with multithreading support (CGAL_HAS_NO_THREADS not defined), it will be enabled by default.
+  The number of threads can be configured via `set_num_threads(...)`.
  */
 template <class Traits,
           class MeshVertexPointPMap = Default,
@@ -883,21 +900,27 @@ public:
     reset();
   }
 
-  Surface_Voronoi_diagram_with_star_metrics(const Surface_mesh& mesh,
-                                            Traits traits = Traits())
+  Surface_Voronoi_diagram_with_star_metrics(const Surface_mesh& mesh, Traits traits = Traits())
       : Surface_Voronoi_diagram_with_star_metrics(
             mesh, get(vertex_point, mesh), get(face_index, mesh), get(edge_index, mesh), traits) {}
 
+  /// \name Modifiers
+  /// @{
+  /*!
+   * \brief Add a site with the given metric index.
+   *
+   * \param p The position of the site.
+   * \param metric_idx The index of the metric associated with the site.
+   */
   void add_site(const Point_3& p, index_t metric_idx) { m_sites.push_back({p, metric_idx}); }
 
   /*!
-   * \brief Add a metric attached to sites added later.
-   * To avoid copy, use add_metric(std::move(...), ...) to move the metric.
+   * \brief Add a metric to be attached to a site later.
    *
-   * \param m
-   * \param vpm
-   * \param fim
-   * \return index_t
+   * \param m The metric polyhedron. To avoid copy, use add_metric(std::move(...), ...) to move the metric.
+   * \param vpm The optional vertex point property map for the metric polyhedron.
+   * \param fim The optional face index property map for the metric polyhedron.
+   * \return index_t The index of the added metric.
    */
   index_t add_metric(Metric_polyhedron m, Metric_vertex_point_pmap vpm, Metric_face_index_pmap fim) {
     auto idx = m_metrics.size();
@@ -905,6 +928,7 @@ public:
     return idx;
   }
 
+  //! See add_metric(Metric_polyhedron m, Metric_vertex_point_pmap vpm, Metric_face_index_pmap fim)
   index_t add_metric(Metric_polyhedron m) {
     auto idx = m_metrics.size();
     m_metrics.emplace_back(std::move(m));
@@ -918,6 +942,47 @@ public:
   void clear_sites() { m_sites.clear(); }
 
   void clear_metrics() { m_metrics.clear(); }
+
+  void disable_site(index_t idx) { m_sites[idx].enabled = false; }
+
+  void enable_site(index_t idx) { m_sites[idx].enabled = true; }
+
+  void disable_all_sites() {
+    for(auto& s : m_sites) {
+      s.enabled = false;
+    }
+  }
+
+  void enable_all_sites() {
+    for(auto& s : m_sites) {
+      s.enabled = true;
+    }
+  }
+
+  void disable_sites(auto it_begin, auto it_end) {
+    for(auto it = it_begin; it != it_end; ++it) {
+      disable_site(*it);
+    }
+  }
+
+  void enable_sites(auto it_begin, auto it_end) {
+    for(auto it = it_begin; it != it_end; ++it) {
+      enable_site(*it);
+    }
+  }
+  /// @}
+
+  /// \name Accessors
+  /// @{
+  std::pair<Site&, Metric_data&> site(index_t idx) {
+    auto& c = m_sites[idx];
+    return {c, m_metrics[c.metric_idx]};
+  }
+
+  std::pair<const Site&, const Metric_data&> site(index_t idx) const {
+    auto& c = m_sites[idx];
+    return {c, m_metrics[c.metric_idx]};
+  }
 
   std::size_t num_sites() const { return m_sites.size(); }
 
@@ -952,7 +1017,10 @@ public:
   const Real_timer& i_timer() const { return i_trace_timer; }
 
   const Real_timer& b_timer() const { return b_trace_timer; }
+  /// @}
 
+  /// \name I/O
+  /// @{
   bool read_sites(std::istream& is) {
     std::size_t n_metrics;
     is >> n_metrics;
@@ -994,45 +1062,18 @@ public:
 
     return true;
   }
+  /// @}
 
-  std::pair<Site&, Metric_data&> site(index_t idx) {
-    auto& c = m_sites[idx];
-    return {c, m_metrics[c.metric_idx]};
-  }
+  /// \name VD Construction
+  /// @{
 
-  std::pair<const Site&, const Metric_data&> site(index_t idx) const {
-    auto& c = m_sites[idx];
-    return {c, m_metrics[c.metric_idx]};
-  }
-
-  void disable_site(index_t idx) { m_sites[idx].enabled = false; }
-
-  void enable_site(index_t idx) { m_sites[idx].enabled = true; }
-
-  void disable_all_sites() {
-    for(auto& s : m_sites) {
-      s.enabled = false;
-    }
-  }
-
-  void enable_all_sites() {
-    for(auto& s : m_sites) {
-      s.enabled = true;
-    }
-  }
-
-  void disable_sites(auto it_begin, auto it_end) {
-    for(auto it = it_begin; it != it_end; ++it) {
-      disable_site(*it);
-    }
-  }
-
-  void enable_sites(auto it_begin, auto it_end) {
-    for(auto it = it_begin; it != it_end; ++it) {
-      enable_site(*it);
-    }
-  }
-
+  /*!
+   * \brief Find the nearest site to point p under the associated metric.
+   *
+   * \param p A point in 3D space.
+   * \param m_cone The cone descriptor of the nearest site.
+   * \return T The distance to the nearest site.
+   */
   T find_nearest_site(const Point_3& p, Cone_descriptor& m_cone) const {
     T d_min = INF;
 
@@ -1268,69 +1309,14 @@ public:
     return std::make_pair(k0, prev_vd);
   }
 
-  // void trace_all_boundaries(mesh_vertex_descriptor vd, bool add_border_edges = true, bool add_cone_vertices =
-  // false) {
-  //     vout << IO::level(1) << SOURCE_LOC << ": start" << std::endl;
-
-  //     Cone_descriptor k0;
-  //     find_nearest_site(get(vpm, vd), k0);
-
-  //     using edge_bool_t = CGAL::dynamic_edge_property_t<bool>;
-  //     using edge_visited_map = typename boost::property_map<Surface_mesh, edge_bool_t>::type;
-
-  //     auto edge_visited = get(edge_bool_t{}, mesh);
-
-  //     std::vector<std::pair<mesh_halfedge_descriptor, Cone_descriptor>> queue;
-  //     for (auto hd : halfedges_around_source(vd, mesh)) {
-  //         queue.emplace_back(hd, k0);
-  //         // put(edge_visited, edge(hd, mesh), true);
-  //     }
-
-  //     while (!queue.empty()) {
-  //         auto [hd, k0] = queue.back();
-  //         queue.pop_back();
-
-  //         if (get(edge_visited, edge(hd, mesh))) continue;
-
-  //         if (is_border(hd, mesh)) {
-  //             // hd is a border halfedge, trace the boundary loop
-  //             auto bhd = hd;
-  //             auto kb = k0;  // Current cone
-  //             vd_vertex_descriptor prev_vd = vd_graph_traits::null_vertex(), vd0;
-  //             do {
-  //                 if (add_border_edges) {
-  //                     auto b_plane = mesh_face_plane(opposite(bhd, mesh));
-  //                     auto v_vd = voronoi->add_vertex(get(vpm, source(bhd, mesh)), Boundary_vertex_info{hd, k0},
-  //                                                     b_plane.orthogonal_vector());
-  //                     if (prev_vd != vd_graph_traits::null_vertex()) {
-  //                         voronoi->connect(prev_vd, v_vd, vd_graph_traits::null_face(), dummy_face);
-  //                     } else {
-  //                         vd0 = v_vd;
-  //                     }
-  //                     prev_vd = v_vd;
-  //                 }
-
-  //                 std::tie(kb, prev_vd) = trace_boundary(bhd, kb, prev_vd, false, true, add_border_edges,
-  //                                                        add_cone_vertices, vd_graph_traits::null_face(),
-  //                                                        dummy_face);
-  //                 put(edge_visited, edge(bhd, mesh), true);
-  //                 bhd = next(bhd, mesh);
-  //             } while (bhd != hd);
-  //             if (add_border_edges) voronoi->connect(prev_vd, vd0, vd_graph_traits::null_face(), dummy_face);
-  //         } else if (is_border(opposite(hd, mesh), mesh)) {
-  //             continue;  // We handle the border halfedge in the previous case
-  //         } else {
-  //             auto [k, _] = trace_boundary(hd, k0, vd_graph_traits::null_vertex(), true, true, false, false);
-  //             put(edge_visited, edge(hd, mesh), true);
-  //             for (auto hd_inner : halfedges_around_source(target(hd, mesh), mesh)) {
-  //                 if (get(edge_visited, edge(hd_inner, mesh))) continue;
-  //                 queue.emplace_back(hd_inner, k);
-  //                 // put(edge_visited, edge(hd_inner, mesh), true);
-  //             }
-  //         }
-  //     }
-  // }
-
+  /*!
+   * \brief Trace all Voronoi boundaries starting from the mesh vertex `vd`.
+   *
+   * \param vd The starting mesh vertex descriptor.
+   * \param add_mesh_vertices Whether to add mesh vertices to the Voronoi diagram.
+   * \param add_boundary_edges Whether to add boundary edges to the Voronoi diagram.
+   * \param add_cone_vertices Whether to add cone transition vertices to the Voronoi diagram.
+   */
   void trace_all_boundaries(mesh_vertex_descriptor vd,
                             bool add_mesh_vertices = true,
                             bool add_boundary_edges = true,
@@ -1445,6 +1431,7 @@ public:
     b_trace_timer.stop();
   }
 
+  //! See trace_all_boundaries(mesh_vertex_descriptor vd, ...)
   void
   trace_all_boundaries(bool add_mesh_vertices = true, bool add_boundary_edges = true, bool add_cone_vertices = false) {
     if(is_empty(mesh))
@@ -1454,6 +1441,7 @@ public:
 
   void reload() { vpm = get(vertex_point, mesh); }
 
+  //! Reset the Voronoi diagram and all internal data structures.
   void reset() {
     voronoi = std::make_shared<Voronoi_diagram_data>();
     dummy_face = add_face(voronoi->graph);
@@ -1505,6 +1493,13 @@ public:
       ;
   }
 
+  /*!
+   * \brief Build the Voronoi diagram.
+   *
+   * \param add_mesh_vertices Whether to add mesh vertices to the Voronoi diagram.
+   * \param add_boundary_edges Whether to add boundary edges to the Voronoi diagram.
+   * \param add_cone_vertices Whether to add cone transition vertices to the Voronoi diagram.
+   */
   void build(bool add_mesh_vertices = true, bool add_boundary_edges = true, bool add_cone_vertices = false) {
     reset();
     trace_all_boundaries(add_mesh_vertices, add_boundary_edges, add_cone_vertices);
@@ -1524,8 +1519,11 @@ public:
          << ", time = " << i_trace_timer.time() << "s, speed = " << i_trace_timer.time() / i_trace_timer.intervals()
          << "s/trace" << std::endl;
   }
+  /// @}
 
 #pragma region DisconnectedComponentRemoval
+  /// \name Disconnected Component Removal
+  /// @{
   void trace_principal_components(const auto& seed_sites,
                                   const auto& seed_points,
                                   const auto& seed_mesh_faces,
@@ -1546,12 +1544,6 @@ public:
 
       for(auto it = range.first; it != range.second; ++it) {
         auto p = seed_points[it->second];
-        // if (bounded_side_3(G, fd, m_sites[site].point, voronoi->vpm) != CGAL::ON_UNBOUNDED_SIDE) {
-        //     put(component_map, fd, site);
-        //     seed_faces.push_back(fd);
-        //     break;
-        // }
-
         if(voronoi->face_bounded_side(fd, p) != CGAL::ON_UNBOUNDED_SIDE) {
           put(component_map, fd, seed_sites[it->second]);
           seed_faces.push_back(fd);
@@ -1635,6 +1627,7 @@ public:
 
     trace_faces();
   }
+  /// @}
 #pragma endregion
 
   static int verbosity() { return vout.output_level(); }
