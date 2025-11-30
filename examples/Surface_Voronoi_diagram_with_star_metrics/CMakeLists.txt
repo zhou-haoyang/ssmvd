@@ -1,3 +1,3 @@
-package_add_example(random_site_cells random_site_cells.cpp)
-package_add_example(simple_viewer simple_viewer.cpp)
-package_add_example(profiling profiling.cpp)
+package_add_example(surface_random_sites random_sites.cpp)
+package_add_example(surface_simple_viewer simple_viewer.cpp)
+package_add_example(surface_profiling profiling.cpp)

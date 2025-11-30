@@ -65,7 +65,7 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  Surface_Voronoi_diagram_with_star_metrics ssm_vd(sm, n_threads);
+  Surface_Voronoi_diagram_with_star_metrics ssm_vd(sm);
 
   Metric_polyhedron mp;
   CGAL::make_tetrahedron(Point_3(-1, -1, -1), Point_3(1, 1, -1), Point_3(-1, 1, 1), Point_3(1, -1, 1), mp);
