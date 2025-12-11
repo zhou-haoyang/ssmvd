@@ -57,6 +57,32 @@ If you use this code in published work, please consider citing the paper:
 
 Haoyang Zhou, Logan Numerow, Stelian Coros, and Bernhard Thomaszewski. 2025. Closed-Form Construction of Voronoi Diagrams with Star-Shaped Metrics. *ACM Trans. Graph.* 44, 6, Article 235 (December 2025), 13 pages. https://doi.org/10.1145/3763296
 
+<details>
+<summary>BibTex</summary>
+  
+```bib
+@article{10.1145/3763296,
+author = {Zhou, Haoyang and Numerow, Logan and Coros, Stelian and Thomaszewski, Bernhard},
+title = {Closed-Form Construction of Voronoi Diagrams with Star-Shaped Metrics},
+year = {2025},
+issue_date = {December 2025},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+volume = {44},
+number = {6},
+issn = {0730-0301},
+url = {https://doi.org/10.1145/3763296},
+doi = {10.1145/3763296},
+abstract = {Cellular patterns, from planar ornaments to architectural surfaces and mechanical metamaterials, blend aesthetics with functionality. Homogeneous patterns like isohedral tilings offer simplicity and symmetry but lack flexibility, particularly for heterogeneous designs. They cannot smoothly interpolate between tilings or adapt to double-curved surfaces without distortion. Voronoi diagrams provide a more adaptable patterning solution. They can be generalized to star-shaped metrics, enabling diverse cell shapes and continuous grading by interpolating metric parameters. Mart\'{\i}nez et al. [2019] explored this idea in 2D using a rasterization-based algorithm to create compelling patterns. However, this discrete approach precludes gradient-based optimization, limiting control over pattern quality. We introduce a novel, closed-form, fully differentiable formulation for Voronoi diagrams with piecewise linear star-shaped metrics, enabling optimization of site positions and metric parameters to meet aesthetic and functional goals. It naturally extends to arbitrary dimensions, including curved 3D surfaces. For improved on-surface patterning, we propose a per-sector parameterization of star-shaped metrics, ensuring uniform cell shapes in non-regular neighborhoods. We demonstrate our approach by generating diverse patterns, from homogeneous to continuously graded designs, with applications in decorative surfaces and metamaterials.},
+journal = {ACM Trans. Graph.},
+month = dec,
+articleno = {236},
+numpages = {13},
+keywords = {voronoi diagram, tiling, pattern, differentiable simulation, metamaterial}
+}
+```
+</details>
+
 ## Contact & Contributions
 - **Bug reports / issues**: Please open an issue on this repository with reproduction steps and any build logs.
 - **Contributions**: Contributions are welcome. Please open a pull request and follow the existing code style and CMake structure.
