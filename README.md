@@ -12,7 +12,13 @@ ETH Zürich, Switzerland
 
 ----
 
-This repository contains the implementation for the paper "Closed-Form Construction of Voronoi Diagrams with Star-Shaped Metrics" to be published in ACM Transactions on Graphics and presented in SIGGRAPH Asia 2025. The code provides algorithms, utilities, and example programs to construct Voronoi diagrams induced by star-shaped metrics both in the 2D plane and on surfaces.
+This repository contains the implementation for the paper "Closed-Form Construction of Voronoi Diagrams with Star-Shaped Metrics" published in ACM Transactions on Graphics and presented in SIGGRAPH Asia 2025. The code provides algorithms, utilities, and example programs to construct Voronoi diagrams induced by star-shaped metrics both in the 2D plane and on surfaces.
+
+<div align="center">
+<a href="https://doi.org/10.1145/3763296">📑 Paper</a>
+<a href="https://ssmvd.haoyang.io/">🕹️ Online Demo</a>
+<a href="https://www.icloud.com/keynote/036lErjBS7y9mGKStJPA3NgGw#SA25-Slides-Final">🎞️ Presentation Slides</a>
+</div>
 
 ## Getting Started
 
